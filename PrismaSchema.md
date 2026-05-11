@@ -1,0 +1,235 @@
+# Prisma Schema
+
+নিচে তোমার chat app + friend system-এর জন্য full **Prisma schema** দিলাম। এতে আছে:
+
+- User
+- Friend Request
+- Friendship
+- Blocked User
+- Conversation
+- Group members
+- Messages
+- Message read receipts
+- Reactions
+
+generator client {
+provider = "prisma-client-js"
+}
+
+datasource db {
+provider = "postgresql"
+url      = env("DATABASE_URL")
+}
+
+enum FriendRequestStatus {
+PENDING
+ACCEPTED
+REJECTED
+CANCELLED
+}
+
+enum ConversationType {
+DIRECT
+GROUP
+}
+
+enum MemberRole {
+ADMIN
+MEMBER
+}
+
+enum MessageType {
+TEXT
+IMAGE
+FILE
+AUDIO
+VIDEO
+}
+
+enum NotificationType {
+NEW_MESSAGE
+FRIEND_REQUEST
+FRIEND_ACCEPTED
+GROUP_INVITE
+GROUP_UPDATE
+}
+
+model User {
+id                        String   @id @default(uuid())
+name                 String
+username         String   @unique
+email                 String   @unique
+password         String
+avatar               String?
+bio                    String?
+
+isOnline           Boolean  @default(false)
+lastSeen          DateTime?
+
+createdAt       DateTime @default(now())
+updatedAt      DateTime @updatedAt
+
+sentFriendRequests         FriendRequest[] @relation("SentFriendRequests")
+receivedFriendRequests FriendRequest[] @relation("ReceivedFriendRequests")
+
+friendships1    Friendship[] @relation("FriendshipUser1")
+friendships2   Friendship[] @relation("FriendshipUser2")
+
+blockedUsers      BlockedUser[] @relation("BlockedBy")
+blockedByUsers BlockedUser[] @relation("BlockedUser")
+
+conversations    ConversationMember[]
+messages            Message[]
+messageReads  MessageRead[]
+reactions            Reaction[]
+
+createdConversations Conversation[]
+}
+
+model FriendRequest {
+id                   String              @id @default(uuid())
+senderId      String
+receiverId    String
+status           FriendRequestStatus @default(PENDING)
+
+createdAt   DateTime @default(now())
+updatedAt  DateTime @updatedAt
+
+sender   User @relation("SentFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
+receiver User @relation("ReceivedFriendRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+@@unique([senderId, receiverId])
+}
+
+model Friendship {
+id        String   @id @default(uuid())
+
+user1Id   String
+user2Id   String
+
+createdAt DateTime @default(now())
+
+user1 User @relation("FriendshipUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+user2 User @relation("FriendshipUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+@@unique([user1Id, user2Id])
+}
+
+model BlockedUser {
+id                         String   @id @default(uuid())
+blockedById     String
+blockedUserId String
+createdAt          DateTime @default(now())
+
+blockedBy         User @relation("BlockedBy", fields: [blockedById], references: [id], onDelete: Cascade)
+blockedUser     User @relation("BlockedUser", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+@@unique([blockedById, blockedUserId])
+}
+
+model Conversation {
+id               String           @id @default(uuid())
+type          ConversationType
+name        String?
+avatar       String?
+
+createdById String
+createdAt    DateTime @default(now())
+updatedAt   DateTime @updatedAt
+
+createdBy    User @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+members     ConversationMember[]
+messages    Message[]
+
+lastMessageId String?   // conversation list fast load করতে
+
+lastMessageAt DateTime? // sort করতে (সবচেয়ে recent আগে)
+}
+
+model ConversationMember {
+id                         String @id @default(uuid())
+conversationId String
+userId                 String
+role                     MemberRole @default(MEMBER)
+
+joinedAt             DateTime @default(now())
+
+conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+user                     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+@@unique([conversationId, userId])
+}
+
+model Message {
+id                         String      @id @default(uuid())
+conversationId String
+senderId            String
+
+content              String
+type                    MessageType @default(TEXT)
+mediaUrl           String?   // file/image URL
+mediaSize         Int?      // file size in bytes
+
+mediaType       String?   // "image/jpeg", "audio/mp3
+
+replyToId         String?
+editedAt          DateTime?
+
+createdAt        DateTime @default(now())
+updatedAt       DateTime @updatedAt
+
+conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+replyTo   Message?  @relation("ReplyMessage", fields: [replyToId], references: [id])
+replies   Message[] @relation("ReplyMessage")
+
+reads     MessageRead[]
+reactions Reaction[]
+
+isDeleted   Boolean   @default(false)
+
+deletedAt   DateTime?
+
+deletedFor  String[]
+}
+
+model MessageRead {
+id        String   @id @default(uuid())
+messageId String
+userId    String
+readAt    DateTime @default(now())
+
+message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+@@unique([messageId, userId])
+}
+
+model Reaction {
+id        String   @id @default(uuid())
+messageId String
+userId    String
+emoji     String
+
+createdAt DateTime @default(now())
+
+message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+@@unique([messageId, userId, emoji])
+}
+
+model Notification {
+id        String   @id @default(uuid())
+userId    String
+type      NotificationType
+title     String
+body      String
+data      Json?    // extra payload
+isRead    Boolean  @default(false)
+createdAt DateTime @default(now())
+
+user User @relation(...)
+}
