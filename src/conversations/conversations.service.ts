@@ -1,5 +1,7 @@
 import {
   ForbiddenException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateDirectDto } from './dto/create-direct.dto';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { buildOffsetPagination } from '../common/utils/pagination.util';
+import { ConversationsGateway } from './conversations.gateway';
 
 const MEMBER_SELECT = {
   id: true,
@@ -40,7 +43,11 @@ const CONVERSATION_SELECT = {
 
 @Injectable()
 export class ConversationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => ConversationsGateway))
+    private readonly conversationsGateway: ConversationsGateway,
+  ) {}
 
   async createDirectConversation(userId: string, dto: CreateDirectDto) {
     const { targetUserId } = dto;
@@ -83,6 +90,13 @@ export class ConversationsService {
       select: CONVERSATION_SELECT,
     });
 
+    // Notify members via socket
+    conversation.members.forEach((member) => {
+      this.conversationsGateway.server
+        .to(`user:${member.userId}`)
+        .emit('conversation_created', { conversation });
+    });
+
     return conversation;
   }
 
@@ -103,6 +117,13 @@ export class ConversationsService {
         },
       },
       select: CONVERSATION_SELECT,
+    });
+
+    // Notify members via socket
+    conversation.members.forEach((member) => {
+      this.conversationsGateway.server
+        .to(`user:${member.userId}`)
+        .emit('conversation_created', { conversation });
     });
 
     return conversation;

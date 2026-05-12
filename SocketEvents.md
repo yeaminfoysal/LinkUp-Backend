@@ -272,7 +272,7 @@ Media message হলে:
   "content": null,
   "type": "IMAGE",
   "mediaUrl": "https://cloudinary.com/...",
-  "mimeType": "image/jpeg",
+  "mediaType": "image/jpeg",
   "mediaSize": 204800,
   "replyToId": null
 }
@@ -381,7 +381,7 @@ reaction_removed
     "content": "hello",
     "type": "TEXT",
     "mediaUrl": null,
-    "mimeType": null,
+    "mediaType": null,
     "mediaSize": null,
     "replyToId": null,
     "createdAt": "2026-05-11T10:00:00Z"

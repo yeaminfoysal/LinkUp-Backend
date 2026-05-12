@@ -39,7 +39,7 @@ async function bootstrap() {
     .setVersion('1.0')
     .addBearerAuth(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-      'JWT',
+      'bearer',
     )
     .addTag('Auth', 'Authentication & token management')
     .addTag('Users', 'User profiles and search')

@@ -19,16 +19,16 @@ export class UploadsService {
     file: Express.Multer.File,
     folder = 'nexchat',
   ): Promise<{ mediaUrl: string; publicId: string; format: string; bytes: number }> {
-    const mimeType = file.mimetype;
+    const mediaType = file.mediaType;
 
     // Validate size
-    if (ALLOWED_IMAGE_TYPES.includes(mimeType) && file.size > MAX_IMAGE_SIZE) {
+    if (ALLOWED_IMAGE_TYPES.includes(mediaType) && file.size > MAX_IMAGE_SIZE) {
       throw new BadRequestException('Image file size must not exceed 5MB');
     }
-    if (ALLOWED_VIDEO_TYPES.includes(mimeType) && file.size > MAX_VIDEO_SIZE) {
+    if (ALLOWED_VIDEO_TYPES.includes(mediaType) && file.size > MAX_VIDEO_SIZE) {
       throw new BadRequestException('Video file size must not exceed 50MB');
     }
-    if (ALLOWED_AUDIO_TYPES.includes(mimeType) && file.size > MAX_AUDIO_SIZE) {
+    if (ALLOWED_AUDIO_TYPES.includes(mediaType) && file.size > MAX_AUDIO_SIZE) {
       throw new BadRequestException('Audio file size must not exceed 20MB');
     }
 
@@ -37,15 +37,15 @@ export class UploadsService {
       ...ALLOWED_VIDEO_TYPES,
       ...ALLOWED_AUDIO_TYPES,
       ...ALLOWED_FILE_TYPES,
-    ].includes(mimeType);
+    ].includes(mediaType);
 
     if (!isAllowed) {
-      throw new BadRequestException(`Unsupported file type: ${mimeType}`);
+      throw new BadRequestException(`Unsupported file type: ${mediaType}`);
     }
 
-    const resourceType = ALLOWED_VIDEO_TYPES.includes(mimeType)
+    const resourceType = ALLOWED_VIDEO_TYPES.includes(mediaType)
       ? 'video'
-      : ALLOWED_AUDIO_TYPES.includes(mimeType)
+      : ALLOWED_AUDIO_TYPES.includes(mediaType)
         ? 'video' // Cloudinary uses 'video' for audio too
         : 'image';
 

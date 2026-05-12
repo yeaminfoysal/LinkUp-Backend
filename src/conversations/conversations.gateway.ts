@@ -10,6 +10,7 @@ import { UseFilters, UseGuards } from '@nestjs/common';
 import { WsJwtGuard } from '../common/guards/ws-jwt.guard';
 import { WsExceptionFilter } from '../common/filters/ws-exception.filter';
 import { ConversationsService } from './conversations.service';
+import { forwardRef, Inject } from '@nestjs/common';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 @UseGuards(WsJwtGuard)
@@ -18,7 +19,10 @@ export class ConversationsGateway {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly conversationsService: ConversationsService) {}
+  constructor(
+    @Inject(forwardRef(() => ConversationsService))
+    private readonly conversationsService: ConversationsService,
+  ) {}
 
   @SubscribeMessage('join_conversation')
   async joinConversation(

@@ -227,7 +227,7 @@ All REST responses return a consistent shape via GlobalTransformInterceptor:
 2. Server validates MIME type and file size (image: max 5MB, video: max 50MB)
 3. File is uploaded to Cloudinary
 4. Server returns `mediaUrl`
-5. Client sends message with `mediaUrl`, `mimeType`, `mediaSize` fields
+5. Client sends message with `mediaUrl`, `mediaType`, `mediaSize` fields
 
 ---
 

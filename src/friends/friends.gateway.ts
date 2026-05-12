@@ -14,6 +14,7 @@ import { WsExceptionFilter } from '../common/filters/ws-exception.filter';
 import { FriendsService } from './friends.service';
 import { SocketStateService } from '../sockets/socket-state.service';
 import { UsersService } from '../users/users.service';
+import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 @UseGuards(WsJwtGuard)
@@ -26,21 +27,35 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     private readonly friendsService: FriendsService,
     private readonly socketState: SocketStateService,
     private readonly usersService: UsersService,
-  ) {}
+    private readonly jwtService: JwtService,
+  ) { }
 
   async handleConnection(client: Socket) {
-    // Guard handles auth; if we get here, client.data.userId is set
-    const userId = client.data.userId as string | undefined;
-    if (!userId) return client.disconnect();
+    try {
+      const token =
+        (client.handshake.auth?.token as string) ||
+        (client.handshake.headers?.authorization?.replace('Bearer ', '') ?? '');
+      if (!token) {
+        client.disconnect();
+        return;
+      }
+      
+      const payload = this.jwtService.verify(token, {
+        secret: process.env.JWT_ACCESS_SECRET,
+      });
+      const userId = payload.sub as string;
+      client.data.userId = userId;
+      client.data.email = payload.email as string;
+      this.socketState.addSocket(userId, client.id);
+      await client.join(`user:${userId}`);
+      await this.usersService.setOnlineStatus(userId, true);
+      this.server.emit('user_online', { userId });
 
-    this.socketState.addSocket(userId, client.id);
-    client.join(`user:${userId}`);
-
-    // Mark online in DB
-    await this.usersService.setOnlineStatus(userId, true);
-
-    // Notify all connected users
-    this.server.emit('user_online', { userId });
+      console.log(`✅ User connected: ${userId}`);
+    } catch (error) {
+      console.log('❌ Connection unauthorized');
+      client.disconnect();
+    }
   }
 
   async handleDisconnect(client: Socket) {
