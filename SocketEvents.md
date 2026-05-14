@@ -2,13 +2,14 @@
 
 তোমার chat app-এ socket events গুলো feature অনুযায়ী ভাগ করলে maintain করা easy হবে।
 
-Mainly 5 category:
+Mainly 6 category:
 
 1. connection/presence
 2. friend system
 3. chat/conversation
 4. messaging
 5. group management
+6. social feed
 
 ---
 
@@ -22,8 +23,9 @@ ping_presence
 ```
 
 > `connect_user` event আলাদা লাগবে না।
-> Socket connect হওয়ার সময় WsJwtGuard JWT verify করবে।
-> userId সবসময় token থেকে নেওয়া হবে, client payload থেকে না।
+Socket connect হওয়ার সময় WsJwtGuard JWT verify করবে।
+userId সবসময় token থেকে নেওয়া হবে, client payload থেকে না।
+> 
 
 ---
 
@@ -171,8 +173,9 @@ user_unblocked
 # 3. Conversation Events
 
 > `create_direct_conversation` এবং `create_group_conversation` REST API তে থাকবে।
-> Create হওয়ার পর server `conversation_created` emit করবে।
-> `get_conversations` ও REST API তে থাকবে।
+Create হওয়ার পর server `conversation_created` emit করবে।
+`get_conversations` ও REST API তে থাকবে।
+> 
 
 ## Client → Server
 
@@ -249,7 +252,8 @@ remove_reaction
 ```
 
 > `reply_message` আলাদা event নেই।
-> Reply করতে হলে `send_message` এ `replyToId` field দাও।
+Reply করতে হলে `send_message` এ `replyToId` field দাও।
+> 
 
 ---
 
@@ -272,7 +276,7 @@ Media message হলে:
   "content": null,
   "type": "IMAGE",
   "mediaUrl": "https://cloudinary.com/...",
-  "mediaType": "image/jpeg",
+  "mimeType": "image/jpeg",
   "mediaSize": 204800,
   "replyToId": null
 }
@@ -366,7 +370,8 @@ reaction_removed
 ```
 
 > `message_sent` আলাদা event নেই।
-> Sender নিজেও room-এ থাকায় `new_message` পাবে।
+Sender নিজেও room-এ থাকায় `new_message` পাবে।
+> 
 
 ---
 
@@ -381,7 +386,7 @@ reaction_removed
     "content": "hello",
     "type": "TEXT",
     "mediaUrl": null,
-    "mediaType": null,
+    "mimeType": null,
     "mediaSize": null,
     "replyToId": null,
     "createdAt": "2026-05-11T10:00:00Z"
@@ -619,7 +624,110 @@ group_deleted
 
 ---
 
-# 6. Notification Events
+# 6. Social Feed Events
+
+> Like, comment, save — এগুলো REST API তে থাকবে।
+REST call শেষে server real-time notify করতে socket emit করবে।
+শুধু post owner এর `user:{userId}` room এ emit হবে।
+> 
+
+## Server → Client only
+
+```
+post_liked
+post_unliked
+post_commented
+post_comment_deleted
+post_comment_liked
+post_comment_unliked
+```
+
+### post_liked
+
+কেউ post এ like করলে post owner কে notify করবে।
+
+```json
+{
+  "postId": "post-1",
+  "likedBy": {
+    "id": "user-2",
+    "name": "Karim",
+    "username": "karim456",
+    "avatar": "https://..."
+  },
+  "totalLikes": 24
+}
+```
+
+### post_unliked
+
+```json
+{
+  "postId": "post-1",
+  "unlikedBy": "user-2",
+  "totalLikes": 23
+}
+```
+
+### post_commented
+
+কেউ comment করলে post owner কে notify করবে।
+
+```json
+{
+  "postId": "post-1",
+  "comment": {
+    "id": "comment-1",
+    "content": "Nice post!",
+    "parentId": null,
+    "createdAt": "2026-05-11T10:00:00Z",
+    "user": {
+      "id": "user-2",
+      "name": "Karim",
+      "username": "karim456",
+      "avatar": "https://..."
+    }
+  }
+}
+```
+
+### post_comment_deleted
+
+```json
+{
+  "postId": "post-1",
+  "commentId": "comment-1"
+}
+```
+
+### post_comment_liked
+
+```json
+{
+  "postId": "post-1",
+  "commentId": "comment-1",
+  "likedBy": {
+    "id": "user-2",
+    "name": "Karim",
+    "username": "karim456",
+    "avatar": "https://..."
+  }
+}
+```
+
+### post_comment_unliked
+
+```json
+{
+  "postId": "post-1",
+  "commentId": "comment-1",
+  "unlikedBy": "user-2"
+}
+```
+
+---
+
+# 7. Notification Events
 
 ## Server → Client only
 
@@ -644,6 +752,39 @@ unread_count_updated
 }
 ```
 
+Post liked notification example:
+
+```json
+{
+  "id": "notif-2",
+  "type": "POST_LIKED",
+  "title": "Karim",
+  "body": "Karim liked your post",
+  "data": {
+    "postId": "post-1",
+    "likedBy": "user-2"
+  },
+  "createdAt": "2026-05-11T10:05:00Z"
+}
+```
+
+Post commented notification example:
+
+```json
+{
+  "id": "notif-3",
+  "type": "POST_COMMENTED",
+  "title": "Karim",
+  "body": "Karim commented on your post",
+  "data": {
+    "postId": "post-1",
+    "commentId": "comment-1",
+    "commentedBy": "user-2"
+  },
+  "createdAt": "2026-05-11T10:10:00Z"
+}
+```
+
 ### unread_count_updated
 
 ```json
@@ -664,16 +805,17 @@ conversation:{conversationId}
 
 Example:
 
-```typescript
+```tsx
 socket.join(`user:${userId}`);
 socket.join(`conversation:${conversationId}`);
 ```
 
 Emit to room:
 
-```typescript
+```tsx
 server.to(`conversation:${id}`).emit('new_message', message);
 server.to(`user:${userId}`).emit('notification_received', notification);
+server.to(`user:${postOwnerId}`).emit('post_liked', payload);
 ```
 
 ---
@@ -748,6 +890,13 @@ group_admin_promoted
 group_admin_demoted
 group_updated
 group_deleted
+
+post_liked
+post_unliked
+post_commented
+post_comment_deleted
+post_comment_liked
+post_comment_unliked
 
 notification_received
 unread_count_updated

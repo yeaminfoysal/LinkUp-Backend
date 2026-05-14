@@ -1,5 +1,3 @@
-# NexChat — Project Structure
-
 ```
 src
 ├── main.ts
@@ -23,7 +21,9 @@ src
 │   ├── enums
 │   │   ├── message-type.enum.ts
 │   │   ├── conversation-type.enum.ts
-│   │   └── notification-type.enum.ts
+│   │   ├── notification-type.enum.ts
+│   │   ├── post-visibility.enum.ts
+│   │   └── member-role.enum.ts
 │   └── utils
 │       └── pagination.util.ts
 │
@@ -90,6 +90,23 @@ src
 │       ├── edit-message.dto.ts
 │       ├── react-message.dto.ts
 │       └── mark-read.dto.ts
+│
+├── posts
+│   ├── posts.module.ts
+│   ├── posts.controller.ts
+│   ├── posts.service.ts
+│   ├── feed
+│   │   └── feed.service.ts
+│   └── dto
+│       ├── create-post.dto.ts
+│       └── update-post.dto.ts
+│
+├── comments
+│   ├── comments.module.ts
+│   ├── comments.controller.ts
+│   ├── comments.service.ts
+│   └── dto
+│       └── create-comment.dto.ts
 │
 ├── notifications
 │   ├── notifications.module.ts
