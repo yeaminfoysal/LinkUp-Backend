@@ -210,7 +210,7 @@ model Message {
 
   isDeleted  Boolean   @default(false)
   deletedAt  DateTime?
-  deletedFor String[]
+  deletedFor String[] @default([])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -260,7 +260,7 @@ model Post {
   id         String         @id @default(uuid())
   userId     String
   content    String?
-  mediaUrls  String[]
+  mediaUrls  String[] @default([])
   visibility PostVisibility @default(PUBLIC)
 
   isDeleted Boolean   @default(false)
