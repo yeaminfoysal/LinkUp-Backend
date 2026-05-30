@@ -8,7 +8,7 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UseFilters, UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards, forwardRef, Inject } from '@nestjs/common';
 import { WsJwtGuard } from '../common/guards/ws-jwt.guard';
 import { WsExceptionFilter } from '../common/filters/ws-exception.filter';
 import { FriendsService } from './friends.service';
@@ -24,6 +24,7 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
   server: Server;
 
   constructor(
+    @Inject(forwardRef(() => FriendsService))
     private readonly friendsService: FriendsService,
     private readonly socketState: SocketStateService,
     private readonly usersService: UsersService,

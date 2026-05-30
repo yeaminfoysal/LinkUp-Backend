@@ -4,8 +4,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  forwardRef,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../common/enums/notification-type.enum';
+import { FriendsGateway } from './friends.gateway';
 
 const FRIEND_USER_SELECT = {
   id: true,
@@ -18,7 +23,12 @@ const FRIEND_USER_SELECT = {
 
 @Injectable()
 export class FriendsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+    @Inject(forwardRef(() => FriendsGateway))
+    private readonly friendsGateway: FriendsGateway,
+  ) {}
 
   async sendRequest(senderId: string, receiverId: string) {
     if (senderId === receiverId) {
@@ -74,6 +84,23 @@ export class FriendsService {
       },
     });
 
+    // Create database notification and trigger socket event
+    await this.notificationsService.createNotification(
+      receiverId,
+      NotificationType.FRIEND_REQUEST,
+      'New Friend Request',
+      `${request.sender.name} sent you a friend request.`,
+      { requestId: request.id, senderId },
+    );
+
+    // Emit direct socket event
+    if (this.friendsGateway.server) {
+      this.friendsGateway.server.to(`user:${receiverId}`).emit('friend_request_received', {
+        requestId: request.id,
+        sender: request.sender,
+      });
+    }
+
     return request;
   }
 
@@ -97,6 +124,23 @@ export class FriendsService {
       }),
     ]);
 
+    // Create database notification and trigger socket event
+    await this.notificationsService.createNotification(
+      request.senderId,
+      NotificationType.FRIEND_ACCEPTED,
+      'Friend Request Accepted',
+      `${request.sender.name} accepted your friend request.`,
+      { friendshipId: friendship.id, receiverId: userId },
+    );
+
+    // Emit direct socket event
+    if (this.friendsGateway.server) {
+      this.friendsGateway.server.to(`user:${request.senderId}`).emit('friend_request_accepted', {
+        requestId: request.id,
+        acceptedBy: request.sender,
+      });
+    }
+
     return { request: updatedRequest, friendship, sender: request.sender };
   }
 
@@ -107,10 +151,18 @@ export class FriendsService {
     if (!request) throw new NotFoundException('Friend request not found');
     if (request.receiverId !== userId) throw new ForbiddenException('Not authorized');
 
-    return this.prisma.friendRequest.update({
+    const updated = await this.prisma.friendRequest.update({
       where: { id: requestId },
       data: { status: 'REJECTED' },
     });
+
+    if (this.friendsGateway.server) {
+      this.friendsGateway.server.to(`user:${request.senderId}`).emit('friend_request_rejected', {
+        requestId: request.id,
+      });
+    }
+
+    return updated;
   }
 
   async cancelRequest(requestId: string, userId: string) {
@@ -120,7 +172,15 @@ export class FriendsService {
     if (!request) throw new NotFoundException('Friend request not found');
     if (request.senderId !== userId) throw new ForbiddenException('Not authorized');
 
-    return this.prisma.friendRequest.delete({ where: { id: requestId } });
+    const deleted = await this.prisma.friendRequest.delete({ where: { id: requestId } });
+
+    if (this.friendsGateway.server) {
+      this.friendsGateway.server.to(`user:${request.receiverId}`).emit('friend_request_cancelled', {
+        requestId: request.id,
+      });
+    }
+
+    return deleted;
   }
 
   async removeFriend(friendshipId: string, userId: string) {
@@ -133,6 +193,13 @@ export class FriendsService {
     }
 
     await this.prisma.friendship.delete({ where: { id: friendshipId } });
+
+    const otherUserId = friendship.user1Id === userId ? friendship.user2Id : friendship.user1Id;
+    if (this.friendsGateway.server) {
+      this.friendsGateway.server.to(`user:${userId}`).emit('friend_removed', { friendshipId });
+      this.friendsGateway.server.to(`user:${otherUserId}`).emit('friend_removed', { friendshipId });
+    }
+
     return { message: 'Friend removed' };
   }
 
