@@ -44,6 +44,16 @@ export class UsersController {
     return this.usersService.searchUsers(dto, user.id);
   }
 
+  @Get('suggestions')
+  @ApiOperation({ summary: 'Get user suggestions (People you may know)' })
+  getSuggestions(
+    @CurrentUser() user: { id: string },
+    @Query('limit') limit?: string,
+  ) {
+    const limitNum = limit ? parseInt(limit, 10) : 4;
+    return this.usersService.getSuggestions(user.id, limitNum);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get user profile by ID' })
   @ApiResponse({ status: 404, description: 'User not found' })

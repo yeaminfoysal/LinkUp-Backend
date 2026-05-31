@@ -90,6 +90,84 @@ export class UsersService {
     return users;
   }
 
+  async getSuggestions(userId: string, limit: number) {
+    // 1. Get blocked user IDs
+    const blocks = await this.prisma.blockedUser.findMany({
+      where: {
+        OR: [
+          { blockedById: userId },
+          { blockedUserId: userId },
+        ],
+      },
+      select: {
+        blockedById: true,
+        blockedUserId: true,
+      },
+    });
+    const blockedUserIds = blocks.map((b) =>
+      b.blockedById === userId ? b.blockedUserId : b.blockedById,
+    );
+
+    // 2. Get friend IDs
+    const friendships = await this.prisma.friendship.findMany({
+      where: {
+        OR: [
+          { user1Id: userId },
+          { user2Id: userId },
+        ],
+      },
+      select: {
+        user1Id: true,
+        user2Id: true,
+      },
+    });
+    const friendIds = friendships.map((f) =>
+      f.user1Id === userId ? f.user2Id : f.user1Id,
+    );
+
+    // 3. Get pending requests user IDs
+    const pendingRequests = await this.prisma.friendRequest.findMany({
+      where: {
+        OR: [
+          { senderId: userId },
+          { receiverId: userId },
+        ],
+        status: 'PENDING',
+      },
+      select: {
+        senderId: true,
+        receiverId: true,
+      },
+    });
+    const pendingUserIds = pendingRequests.map((r) =>
+      r.senderId === userId ? r.receiverId : r.senderId,
+    );
+
+    // 4. Combine all IDs to exclude
+    const excludeIds = [userId, ...blockedUserIds, ...friendIds, ...pendingUserIds];
+
+    // 5. Query suggestions
+    const suggestions = await this.prisma.user.findMany({
+      where: {
+        id: {
+          notIn: excludeIds,
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        avatar: true,
+        isOnline: true,
+        lastSeen: true,
+      },
+      take: limit,
+    });
+
+    return suggestions;
+  }
+
+
   async setOnlineStatus(userId: string, isOnline: boolean) {
     return this.prisma.user.update({
       where: { id: userId },
