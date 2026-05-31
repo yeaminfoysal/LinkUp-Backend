@@ -12,4 +12,9 @@ export class CreateCommentDto {
   @IsOptional()
   @IsUUID()
   parentId?: string;
+
+  @ApiProperty({ description: 'Post ID' })
+  @IsNotEmpty()
+  @IsUUID()
+  postId: string;
 }

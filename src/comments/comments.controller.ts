@@ -12,22 +12,22 @@ import { ApiBearerAuth, ApiTags, ApiQuery, ApiOperation } from '@nestjs/swagger'
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
-  @Post('post/:postId')
+  @Post()
   @ApiOperation({ summary: 'Add a comment to a post' })
   create(
     @CurrentUser('id') userId: string,
-    @Param('postId') postId: string,
     @Body() createCommentDto: CreateCommentDto,
   ) {
-    return this.commentsService.createComment(userId, postId, createCommentDto);
+    return this.commentsService.createComment(userId, createCommentDto.postId, createCommentDto);
   }
 
-  @Get('post/:postId')
+  @Get()
   @ApiOperation({ summary: 'Get comments for a post' })
+  @ApiQuery({ name: 'postId', required: true })
   @ApiQuery({ name: 'cursor', required: false })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getComments(
-    @Param('postId') postId: string,
+    @Query('postId') postId: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: number,
   ) {

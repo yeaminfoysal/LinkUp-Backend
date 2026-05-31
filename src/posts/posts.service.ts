@@ -139,4 +139,28 @@ export class PostsService {
     await this.prisma.savedPost.delete({ where: { id: saved.id } });
     return { message: 'Post unsaved' };
   }
+
+  async getPostLikes(postId: string) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId, isDeleted: false },
+    });
+    if (!post) throw new NotFoundException('Post not found');
+
+    const likes = await this.prisma.postLike.findMany({
+      where: { postId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatar: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return likes.map((l) => l.user);
+  }
 }

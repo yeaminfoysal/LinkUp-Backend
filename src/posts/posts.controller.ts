@@ -93,4 +93,10 @@ export class PostsController {
   unsavePost(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.postsService.unsavePost(userId, id);
   }
+
+  @Get(':id/likes')
+  @ApiOperation({ summary: 'Get users who liked a post' })
+  getPostLikes(@Param('id') id: string) {
+    return this.postsService.getPostLikes(id);
+  }
 }

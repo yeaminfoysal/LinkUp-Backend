@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -36,7 +37,7 @@ export class UsersService {
       data: {
         ...(dto.name && { name: dto.name }),
         ...(dto.bio !== undefined && { bio: dto.bio }),
-        ...(dto.avatar && { avatar: dto.avatar }),
+        ...(dto.avatar !== undefined && { avatar: dto.avatar }),
       },
       select: USER_SELECT,
     });
@@ -72,7 +73,7 @@ export class UsersService {
     const users = await this.prisma.user.findMany({
       where: {
         AND: [
-          { id: { not: requesterId } },
+          // { id: { not: requesterId } },
           { id: { notIn: Array.from(blockedIds) } },
           {
             OR: [

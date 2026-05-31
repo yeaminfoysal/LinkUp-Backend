@@ -1,8 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { configureCloudinary } from '../config/cloudinary.config';
+import { configureCloudinary, cloudinary } from '../config/cloudinary.config';
 import { UploadApiResponse } from 'cloudinary';
-
-const cloudinary = configureCloudinary();
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
@@ -15,11 +13,15 @@ const ALLOWED_FILE_TYPES = ['application/pdf', 'text/plain'];
 
 @Injectable()
 export class UploadsService {
+  constructor() {
+    configureCloudinary();
+  }
+
   async uploadFile(
     file: Express.Multer.File,
     folder = 'nexchat',
   ): Promise<{ mediaUrl: string; publicId: string; format: string; bytes: number }> {
-    const mediaType = file.mediaType;
+    const mediaType = file.mimetype;
 
     // Validate size
     if (ALLOWED_IMAGE_TYPES.includes(mediaType) && file.size > MAX_IMAGE_SIZE) {
