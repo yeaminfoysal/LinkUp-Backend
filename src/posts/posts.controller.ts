@@ -48,6 +48,18 @@ export class PostsController {
     return this.feedService.getUserPosts(userId, targetUserId, cursor, limit ? Number(limit) : 20);
   }
 
+  @Get('saved')
+  @ApiOperation({ summary: 'Get saved/bookmarked posts' })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getSavedPosts(
+    @CurrentUser('id') userId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.feedService.getSavedPosts(userId, cursor, limit ? Number(limit) : 20);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a single post by ID' })
   findOne(@Param('id') id: string) {

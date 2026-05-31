@@ -50,12 +50,29 @@ export class FeedService {
       include: {
         user: { select: { id: true, name: true, username: true, avatar: true } },
         _count: { select: { likes: true, comments: { where: { isDeleted: false } } } },
+        likes: {
+          where: { userId },
+          select: { userId: true },
+        },
+        saved: {
+          where: { userId },
+          select: { userId: true },
+        },
       },
     });
 
     const hasNextPage = posts.length > limit;
-    const items = hasNextPage ? posts.slice(0, -1) : posts;
-    const nextCursor = hasNextPage ? items[items.length - 1].id : null;
+    const rawItems = hasNextPage ? posts.slice(0, -1) : posts;
+    const nextCursor = hasNextPage ? rawItems[rawItems.length - 1].id : null;
+
+    const items = rawItems.map((p) => {
+      const { likes, saved, ...post } = p;
+      return {
+        ...post,
+        hasLiked: likes.length > 0,
+        hasSaved: saved.length > 0,
+      };
+    });
 
     return {
       items,
@@ -110,12 +127,74 @@ export class FeedService {
       include: {
         user: { select: { id: true, name: true, username: true, avatar: true } },
         _count: { select: { likes: true, comments: { where: { isDeleted: false } } } },
+        likes: {
+          where: { userId: viewerId },
+          select: { userId: true },
+        },
+        saved: {
+          where: { userId: viewerId },
+          select: { userId: true },
+        },
       },
     });
 
     const hasNextPage = posts.length > limit;
-    const items = hasNextPage ? posts.slice(0, -1) : posts;
-    const nextCursor = hasNextPage ? items[items.length - 1].id : null;
+    const rawItems = hasNextPage ? posts.slice(0, -1) : posts;
+    const nextCursor = hasNextPage ? rawItems[rawItems.length - 1].id : null;
+
+    const items = rawItems.map((p) => {
+      const { likes, saved, ...post } = p;
+      return {
+        ...post,
+        hasLiked: likes.length > 0,
+        hasSaved: saved.length > 0,
+      };
+    });
+
+    return {
+      items,
+      nextCursor,
+      hasNextPage,
+    };
+  }
+
+  async getSavedPosts(userId: string, cursor?: string, limit = 20) {
+    const savedPosts = await this.prisma.savedPost.findMany({
+      where: { userId },
+      take: limit + 1,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { createdAt: 'desc' },
+      include: {
+        post: {
+          include: {
+            user: { select: { id: true, name: true, username: true, avatar: true } },
+            _count: { select: { likes: true, comments: { where: { isDeleted: false } } } },
+            likes: {
+              where: { userId },
+              select: { userId: true },
+            },
+            saved: {
+              where: { userId },
+              select: { userId: true },
+            },
+          },
+        },
+      },
+    });
+
+    const hasNextPage = savedPosts.length > limit;
+    const rawItems = hasNextPage ? savedPosts.slice(0, -1) : savedPosts;
+    const nextCursor = hasNextPage ? rawItems[rawItems.length - 1].id : null;
+
+    const items = rawItems.map((sp) => {
+      const p = sp.post;
+      const { likes, saved, ...post } = p;
+      return {
+        ...post,
+        hasLiked: likes.length > 0,
+        hasSaved: saved.length > 0,
+      };
+    });
 
     return {
       items,
