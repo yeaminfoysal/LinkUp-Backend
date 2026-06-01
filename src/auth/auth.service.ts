@@ -129,8 +129,10 @@ export class AuthService {
   }
 
   private async storeRefreshToken(userId: string, token: string) {
+    const refreshExpiresIn = process.env.JWT_REFRESH_EXPIRES_IN ?? '90d';
+    const days = parseInt(refreshExpiresIn, 10) || 90;
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    expiresAt.setDate(expiresAt.getDate() + days);
 
     await this.prisma.refreshToken.create({
       data: { userId, token, expiresAt },
