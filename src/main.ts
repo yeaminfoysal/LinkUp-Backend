@@ -10,12 +10,25 @@ async function bootstrap() {
   // Use custom Socket.IO adapter
   app.useWebSocketAdapter(new SocketAdapter(app));
 
-  // Global prefix
-  app.setGlobalPrefix('api/v1');
+  // Global prefix (excluding root path so "/" doesn't return 404)
+  app.setGlobalPrefix('api/v1', { exclude: ['/'] });
 
-  // CORS
+  // CORS Setup (Robust validation to prevent trailing slash issues and support multiple origins)
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const allowedOrigins = frontendUrl.split(',').map((url) => url.trim());
+  const origins = [
+    ...allowedOrigins,
+    ...allowedOrigins.map((url) => (url.endsWith('/') ? url.slice(0, -1) : `${url}/`)),
+  ];
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      if (!origin || origins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
