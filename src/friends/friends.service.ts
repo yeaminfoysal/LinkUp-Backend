@@ -224,20 +224,25 @@ export class FriendsService {
       },
     });
 
-    // Cancel any pending friend requests
+    // Remove all friend requests (any status) between the two users
     await this.prisma.friendRequest.deleteMany({
       where: {
         OR: [
           { senderId: blockerId, receiverId: targetId },
           { senderId: targetId, receiverId: blockerId },
         ],
-        status: 'PENDING',
       },
     });
 
-    return this.prisma.blockedUser.create({
+    const blocked = await this.prisma.blockedUser.create({
       data: { blockedById: blockerId, blockedUserId: targetId },
     });
+
+    if (this.friendsGateway.server) {
+      this.friendsGateway.server.to(`user:${targetId}`).emit('user_blocked', { blockedBy: blockerId });
+    }
+
+    return blocked;
   }
 
   async unblockUser(blockerId: string, targetId: string) {
@@ -246,9 +251,15 @@ export class FriendsService {
     });
     if (!block) throw new NotFoundException('Block not found');
 
-    return this.prisma.blockedUser.delete({
+    const deleted = await this.prisma.blockedUser.delete({
       where: { blockedById_blockedUserId: { blockedById: blockerId, blockedUserId: targetId } },
     });
+
+    if (this.friendsGateway.server) {
+      this.friendsGateway.server.to(`user:${targetId}`).emit('user_unblocked', { unblockedBy: blockerId });
+    }
+
+    return deleted;
   }
 
   async getFriends(userId: string) {
@@ -283,5 +294,15 @@ export class FriendsService {
       include: { receiver: { select: FRIEND_USER_SELECT } },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async getBlockedUsers(userId: string) {
+    const blocks = await this.prisma.blockedUser.findMany({
+      where: { blockedById: userId },
+      include: {
+        blockedUser: { select: FRIEND_USER_SELECT },
+      },
+    });
+    return blocks.map((b) => b.blockedUser);
   }
 }

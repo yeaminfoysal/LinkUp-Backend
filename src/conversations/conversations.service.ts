@@ -169,6 +169,25 @@ export class ConversationsService {
       select: CONVERSATION_SELECT,
     });
     if (!conv) throw new NotFoundException('Conversation not found');
+
+    if (conv.type === 'DIRECT') {
+      const partnerMember = conv.members.find((m) => m.userId !== userId);
+      if (partnerMember) {
+        const block = await this.prisma.blockedUser.findFirst({
+          where: {
+            OR: [
+              { blockedById: userId, blockedUserId: partnerMember.userId },
+              { blockedById: partnerMember.userId, blockedUserId: userId },
+            ],
+          },
+        });
+        if (block) {
+          (conv as any).isBlocked = true;
+          (conv as any).blockedById = block.blockedById;
+        }
+      }
+    }
+
     return conv;
   }
 

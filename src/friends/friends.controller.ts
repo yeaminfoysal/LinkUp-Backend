@@ -80,6 +80,11 @@ export class FriendsController {
   ) {
     return this.friendsService.removeFriend(friendshipId, user.id);
   }
+  @Get('blocked')
+  @ApiOperation({ summary: 'Get blocked users list' })
+  getBlockedUsers(@CurrentUser() user: { id: string }) {
+    return this.friendsService.getBlockedUsers(user.id);
+  }
 
   @Post('block')
   @ApiOperation({ summary: 'Block a user' })

@@ -50,6 +50,15 @@ export class UsersController {
     return this.usersService.getSuggestions(user.id, limitNum);
   }
 
+  @Get('profile/:username')
+  @ApiOperation({ summary: 'Get profile by username with block details' })
+  async getProfileByUsername(
+    @Param('username') username: string,
+    @CurrentUser() currentUser: { id: string },
+  ) {
+    return this.usersService.getProfileByUsername(username, currentUser.id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get user profile by ID' })
   @ApiResponse({ status: 404, description: 'User not found' })

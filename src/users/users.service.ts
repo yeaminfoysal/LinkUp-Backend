@@ -1,5 +1,4 @@
-/* eslint-disable prettier/prettier */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { SearchUserDto } from './dto/search-user.dto';
@@ -168,6 +167,36 @@ export class UsersService {
     return suggestions;
   }
 
+
+  async getProfileByUsername(username: string, requesterId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { username },
+      select: {
+        ...USER_SELECT,
+        blockedUsers: {
+          where: { blockedUserId: requesterId },
+        },
+        blockedByUsers: {
+          where: { blockedById: requesterId },
+        },
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const blockedByTarget = user.blockedUsers.length > 0;
+    if (blockedByTarget) {
+      throw new ForbiddenException('Profile unavailable');
+    }
+
+    const blockedByMe = user.blockedByUsers.length > 0;
+
+    const { blockedUsers, blockedByUsers, ...profileData } = user as any;
+
+    return {
+      ...profileData,
+      isBlockedByMe: blockedByMe,
+    };
+  }
 
   async setOnlineStatus(userId: string, isOnline: boolean) {
     return this.prisma.user.update({
