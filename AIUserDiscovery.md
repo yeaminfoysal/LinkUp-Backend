@@ -272,18 +272,30 @@ tsx
 
 `async generateMatchReason(
   userBio: string,
+  university: string,
+  department: string,
+  skills: string,
+  interests: string,
+  profession: string,
+  work_place: string,
   query: string,
   score: number
 ): Promise<string> {
 
-  const response = await this.anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 60,
-    messages: [{
+ const response = await this.openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  max_tokens: 60,
+  messages: [{
       role: 'user',
       content: `
         Search query: "${query}"
         User bio: "${userBio}"
+        User university: "${university}"
+        User department: "${department}"
+        User skills: "${skills}"
+        User interests: "${interests}"
+        User profession: "${profession}"
+        User work_place: "${work_place}"
         Match score: ${score}%
 
         Write a 1 sentence reason why this user matches the search.

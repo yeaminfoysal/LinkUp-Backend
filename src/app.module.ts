@@ -16,6 +16,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { PostsModule } from './posts/posts.module';
 import { CommentsModule } from './comments/comments.module';
+import { AiDiscoveryModule } from './ai-discovery/ai-discovery.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -46,6 +47,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     UploadsModule,
     PostsModule,
     CommentsModule,
+    AiDiscoveryModule,
   ],
   controllers: [AppController],
   providers: [

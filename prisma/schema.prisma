@@ -1,9 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
 // ─────────────────────────────────────────
@@ -63,6 +65,20 @@ model User {
   password String
   avatar   String?
   bio      String?
+
+  // Extended profile fields for AI discovery
+  location   String?
+  university String?
+  department String?
+  skills     String?
+  interests  String?
+  profession String?
+  work_place String?
+
+  // AI embedding fields
+  profileText        String?
+  profileEmbedding   Unsupported("vector(1536)")?
+  embeddingUpdatedAt DateTime?
 
   isOnline Boolean   @default(false)
   lastSeen DateTime?
