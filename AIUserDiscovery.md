@@ -43,7 +43,7 @@ AI converts that query into a vector → compares it with every user's vector in
           ↓
 Generate Structured Profile Text
           ↓
-OpenAI Embedding API → vector [1536 numbers]
+Gemini Embedding API → vector [1536 numbers]
           ↓
 Save to PostgreSQL (pgvector)
 
@@ -52,7 +52,7 @@ Save to PostgreSQL (pgvector)
 User searches:
 "backend developer interested in AI"
           ↓
-Query → OpenAI Embedding API → vector
+Query → Genmini Embedding API → vector
           ↓
 pgvector: cosine similarity compare
           ↓
@@ -115,11 +115,11 @@ tsx
 
 @Injectable()
 export class EmbeddingService {
-  private openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  private Genmini = new Genmini({ apiKey: process.env.Genmini_API_KEY });
 
   async generateEmbedding(text: string): Promise<number[]> {
     try {
-      const response = await this.openai.embeddings.create({
+      const response = await this.Genmini.embeddings.create({
         model: 'text-embedding-3-small', // 1536 dimensions
         input: text,
       });
@@ -282,7 +282,7 @@ tsx
   score: number
 ): Promise<string> {
 
- const response = await this.openai.chat.completions.create({
+ const response = await this.Genmini.chat.completions.create({
   model: 'gpt-4o-mini',
   max_tokens: 60,
   messages: [{
@@ -430,7 +430,7 @@ json
         ↓
   buildProfileText() → structured text
         ↓
-  OpenAI Embedding API → vector[1536]
+  Genmini Embedding API → vector[1536]
         ↓
   User.profileEmbedding saved to DB
 
@@ -442,7 +442,7 @@ Search:
         ↓
   Rate limit check (10/min)
         ↓
-  OpenAI Embedding API → query vector
+  Genmini Embedding API → query vector
         ↓
   pgvector cosine similarity
         ↓
@@ -459,7 +459,7 @@ Search:
 `✦ Enable pgvector PostgreSQL extension
 ✦ Add vector(1536) column in Prisma schema
 ✦ Create ivfflat index (fast search)
-✦ Store OpenAI API key in .env
+✦ Store Genmini API key in .env
 ✦ Build EmbeddingService
 ✦ Build AiDiscoveryModule
 ✦ Apply rate limiting

@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
 
@@ -29,12 +29,12 @@ interface SearchResultRow extends UserProfile {
 
 @Injectable()
 export class AiDiscoveryService {
-  private openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  private genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
   constructor(
     private prisma: PrismaService,
     private embeddingService: EmbeddingService,
-  ) {}
+  ) { }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Profile Text Builder
@@ -97,11 +97,11 @@ export class AiDiscoveryService {
     // Prisma doesn't support vector type natively — use raw SQL
     const vectorLiteral = `[${embedding.join(',')}]`;
     await this.prisma.$executeRaw`
-      UPDATE users
+      UPDATE "User"
       SET
-        profile_text       = ${profileText},
-        profile_embedding  = ${vectorLiteral}::vector,
-        embedding_updated_at = NOW()
+        "profileText"       = ${profileText},
+        "profileEmbedding"  = ${vectorLiteral}::vector,
+        "embeddingUpdatedAt" = NOW()
       WHERE id = ${userId}
     `;
   }
@@ -154,21 +154,21 @@ export class AiDiscoveryService {
         interests,
         profession,
         work_place,
-        is_online            AS "isOnline",
-        embedding_updated_at AS "embeddingUpdatedAt",
+        "isOnline",
+        "embeddingUpdatedAt",
         ROUND(
-          (1 - (profile_embedding <=> ${vectorLiteral}::vector)) * 100
+          (1 - ("profileEmbedding" <=> ${vectorLiteral}::vector)) * 100
         ) AS match_score
-      FROM users
+      FROM "User"
       WHERE
         id != ALL(${excludeIds}::text[])
-        AND profile_embedding IS NOT NULL
-        AND (1 - (profile_embedding <=> ${vectorLiteral}::vector)) > 0.5
-      ORDER BY profile_embedding <=> ${vectorLiteral}::vector
+        AND "profileEmbedding" IS NOT NULL
+        AND (1 - ("profileEmbedding" <=> ${vectorLiteral}::vector)) > 0.6
+      ORDER BY "profileEmbedding" <=> ${vectorLiteral}::vector
       LIMIT 20
     `;
 
-    // Step 4: Generate match reasons in parallel (using OpenAI gpt-4o-mini)
+    // Step 4: Generate match reasons in parallel (using Genmini gpt-4o-mini)
     const enriched = await Promise.all(
       results.map(async (user) => {
         const matchReason = await this.generateMatchReason({
@@ -208,7 +208,7 @@ export class AiDiscoveryService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Match Reason Generator (OpenAI gpt-4o-mini)
+  // Match Reason Generator (Genmini gpt-4o-mini)
   // ─────────────────────────────────────────────────────────────────────────────
 
   async generateMatchReason(params: {
@@ -235,13 +235,8 @@ export class AiDiscoveryService {
     } = params;
 
     try {
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        max_tokens: 60,
-        messages: [
-          {
-            role: 'user',
-            content: `
+      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const prompt = `
 Search query: "${query}"
 User bio: "${bio ?? ''}"
 User university: "${university ?? ''}"
@@ -255,13 +250,13 @@ Match score: ${score}%
 Write a 1 sentence reason why this user matches the search.
 Be specific. Max 10 words. No filler words.
 Example: "NestJS developer with strong AI interest in Dhaka"
-            `.trim(),
-          },
-        ],
-      });
+      `.trim();
 
-      return response.choices[0]?.message?.content?.trim() ?? 'Good match for your search';
-    } catch {
+      const result = await model.generateContent(prompt);
+      const response = result.response;
+      return response.text().trim() || 'Good match for your search';
+    } catch (error) {
+      console.error('Match reason generation failed:', error);
       return 'Matches your search criteria';
     }
   }

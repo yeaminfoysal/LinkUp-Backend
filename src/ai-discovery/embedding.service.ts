@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 @Injectable()
 export class EmbeddingService {
-  private openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  private genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
   /**
    * Generate a 1536-dimensional embedding vector for the given text.
@@ -12,11 +12,21 @@ export class EmbeddingService {
    */
   async generateEmbedding(text: string): Promise<number[] | null> {
     try {
-      const response = await this.openai.embeddings.create({
-        model: 'text-embedding-3-small', // 1536 dimensions
-        input: text,
-      });
-      return response.data[0].embedding;
+      const model = this.genAI.getGenerativeModel({ model: 'gemini-embedding-2' });
+      const result = await model.embedContent(text);
+      const embedding = result.embedding.values;
+      
+      // PostgreSQL schema is vector(1536), but gemini-embedding-2 returns 3072 dimensions.
+      if (embedding.length > 1536) {
+        return embedding.slice(0, 1536);
+      } else if (embedding.length < 1536) {
+        const padded = new Array(1536).fill(0);
+        for (let i = 0; i < embedding.length; i++) {
+          padded[i] = embedding[i];
+        }
+        return padded;
+      }
+      return embedding as number[];
     } catch (error) {
       console.error('Embedding generation failed:', error);
       return null;
