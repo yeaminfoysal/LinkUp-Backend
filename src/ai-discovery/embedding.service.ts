@@ -13,19 +13,13 @@ export class EmbeddingService {
   async generateEmbedding(text: string): Promise<number[] | null> {
     try {
       const model = this.genAI.getGenerativeModel({ model: 'gemini-embedding-2' });
-      const result = await model.embedContent(text);
+      // Pass outputDimensionality so the model natively projects it to 1536 dims
+      const result = await model.embedContent({
+        content: { role: 'user', parts: [{ text }] },
+        outputDimensionality: 1536
+      } as any);
       const embedding = result.embedding.values;
       
-      // PostgreSQL schema is vector(1536), but gemini-embedding-2 returns 3072 dimensions.
-      if (embedding.length > 1536) {
-        return embedding.slice(0, 1536);
-      } else if (embedding.length < 1536) {
-        const padded = new Array(1536).fill(0);
-        for (let i = 0; i < embedding.length; i++) {
-          padded[i] = embedding[i];
-        }
-        return padded;
-      }
       return embedding as number[];
     } catch (error) {
       console.error('Embedding generation failed:', error);

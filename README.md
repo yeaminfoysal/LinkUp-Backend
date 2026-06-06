@@ -1,351 +1,116 @@
-# Chatting App
-
-# Project Name
-
-NexChat
-
----
-
-# Project Overview
-
-**Project Type:** Real-time Chat + Social Feed Application
-
-In this application, the user:
-
-- can create/login account
-- can search and see other users
-- can send/accept/reject friend request
-- can do one-to-one chat
-- can create group and chat with multiple users
-- can see live online status, typing indicator, read receipts
-- can create posts with text, image, video
-- can see a feed of posts from friends and public users
-- can like, comment, and react to posts
-- can control post visibility (public or friends only)
-- Receive real-time notifications and messages
-
-This application combines modern messaging with a social feed, similar to:
-
-- WhatsApp + Facebook
+<div align="center">
+  <img src="https://via.placeholder.com/150/8b5cf6/ffffff?text=LinkUp" alt="LinkUp Logo" width="150" height="150" />
+  <h1>🚀 LinkUp - Backend</h1>
+  <p>
+    The LinkUp backend is a robust, highly scalable API built with NestJS that serves as the core engine for an AI-driven professional networking platform. It seamlessly integrates Postgres <code>pgvector</code> and Google Gemini AI to deliver lightning-fast semantic searches and dynamic match reasoning. Paired with an event-driven WebSocket architecture, it ensures secure, real-time communication and flawless data synchronization across the entire network.
+  </p>
+</div>
 
 ---
 
-# Main Features
+## 🌟 Core Architecture & Features
 
-## Authentication & Authorization
+### 🧠 Dual-Engine AI Discovery System
+The backend utilizes a sophisticated two-step AI pipeline to deliver highly accurate search results:
+- **Vector Semantic Search:** User profiles are converted into high-dimensional (1536-dim) vector embeddings. Using **Postgres `pgvector`**, blazing-fast **Cosine Similarity** queries are performed to find contextual matches rather than just keyword matches.
+- **Generative AI Match Reasoning:** Once matches are found, they are batch processed through the **Google Gemini 2.5 Flash** model to dynamically generate personalized, 1-sentence explanations of *why* the user fits the specific search criteria.
 
-- User registration
-- Login/logout
-- JWT authentication (access token: 15m, refresh token: 7d)
-- Refresh token stored in database (revoked on logout)
-- Password hashing with bcrypt
-- Protected routes via JwtAuthGuard
-- Socket authentication via WsJwtGuard
+### ⚡ Event-Driven Real-Time Engine
+A robust WebSocket architecture ensures the app feels alive and instantaneous.
+- **Socket.IO Integration:** Handles bi-directional communication for instant direct messaging and group chats.
+- **Live State Tracking:** User connectivity is accurately tracked to broadcast real-time "Online" and "Last Seen" statuses across the entire network.
 
----
+### 🔐 Enterprise-Grade Security & Auth
+The system is built with security-first principles to protect user data.
+- **JWT & Passport.js:** Stateless, secure authentication flow with encrypted tokens.
+- **Bcrypt Hashing:** Industry-standard password cryptography.
+- **API Rate Limiting:** Built-in `Throttler` guards the expensive AI endpoints from abuse and gracefully handles API quota limits using resilient fallback strategies.
 
-## User Management
-
-- User profile
-- Update profile
-- Bio
-- Upload avatar (Cloudinary)
-- Username search
-- Online/offline status
-- Last seen
-- Post count on profile
-- View other user's public posts from their profile
+### ☁️ Scalable Media Management
+- **Cloudinary Integration:** Direct-to-cloud uploading for user avatars and social feed media, ensuring the backend server remains lightweight and stateless.
 
 ---
 
-## Friend System
+## 🛠️ Full Project Tech Stack (Frontend & Backend)
 
-- Search users
-- Send friend request
-- Accept request
-- Reject request
-- Cancel request
-- Remove friend
-- Block user
-- Friend list
-- Incoming/outgoing requests
-
----
-
-## One-to-One Chat
-
-- Direct messaging
-- Conversation list (sorted by lastMessageAt)
-- Last message preview (denormalized: lastMessageId on Conversation)
-- Unread message count
+| Category | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Frontend** | **[Next.js](https://nextjs.org/)** | React Framework for production |
+| **Frontend** | **[React](https://reactjs.org/)** | UI Library |
+| **Frontend** | **[Tailwind CSS](https://tailwindcss.com/)** | Utility-first CSS framework for styling |
+| **Frontend** | **[Zustand](https://zustand-demo.pmnd.rs/) & [TanStack Query](https://tanstack.com/query/latest)** | Global state management & server state caching |
+| **Backend** | **[NestJS](https://nestjs.com/)** | Progressive Node.js framework for scalable server-side apps |
+| **Backend** | **[Prisma](https://www.prisma.io/) & [PostgreSQL](https://www.postgresql.org/)** | Next-generation ORM and primary relational database |
+| **AI & Search** | **[pgvector](https://github.com/pgvector/pgvector)** | Postgres extension for vector similarity search |
+| **AI & Search** | **[Google Gemini AI](https://ai.google.dev/)** | Generating embeddings and dynamic match reasoning |
+| **Real-Time** | **[Socket.IO](https://socket.io/)** | Real-time bidirectional event-based communication |
+| **Auth**| **[Passport & JWT](https://www.passportjs.org/)** | Stateless authentication and authorization |
+| **Cloud** | **[Cloudinary](https://cloudinary.com/)** | Cloud-based image and video management |
 
 ---
 
-## Group Chat
+## 🚀 Setup & Environment Instructions
 
-- Create group
-- Group avatar
-- Group name
-- Add/remove members
-- Leave group
-- Group admin role
+### Prerequisites
+Ensure Node.js (v18+), npm, and a running PostgreSQL instance with the `pgvector` extension are installed.
 
----
-
-## Messaging Features
-
-- Send text message
-- Image / file / audio / video message (uploaded to Cloudinary first, then mediaUrl sent in message)
-- Reply message (replyToId field on Message)
-- Edit message
-- Delete message (soft delete: isDeleted flag, not removed from DB)
-- Delete for everyone (optional)
-
----
-
-## Real-Time Features
-
-Using **Socket.IO**
-
-- Instant messaging
-- Typing indicator
-- Online/offline event
-- Friend request realtime events
-- Seen/read receipts
-- Live notifications
-- Real-time like and comment events on posts
-
----
-
-## Message Interaction
-
-- Emoji reactions
-- Pin message (optional)
-- Message forwarding (optional)
-
----
-
-## Social Feed
-
-- Create post (text, image, video, or mixed)
-- Post visibility: PUBLIC (everyone) or FRIENDS (friends only)
-- Edit post
-- Delete post (soft delete)
-- Feed: paginated list of posts from friends + public posts
-- Cursor-based pagination for feed
-- Blocked users' posts are excluded from feed
-- View a specific user's posts from their profile page
-
----
-
-## Feed
-
-User timeline shows:
-
-- own posts
-- friends' posts
-- public posts
-
-Feed rules:
-
-### Public post
-
-visible to all users
-
-### Friends only post
-
-visible only to friends
-
-Feed sorting:
-
-- newest first
-- trending optional
-
----
-
-## Post Interactions
-
-- Like a post
-- Unlike a post
-- View who liked a post
-- Add comment on a post
-- Reply to a comment (parentId on comment)
-- Delete own comment
-- Like a comment
-- Unlike a comment
-- Save a post (optional)
-
----
-
-## Notification System
-
-- Notifications are always persisted to the database
-- If target user is online, also emit via socket in real time
-- New message notification
-- Friend request notification
-- Group invite notification
-- Post liked notification
-- Post commented notification
-- Comment liked notification (optional)
-
----
-
-# Tech Stack
-
-## Backend
-
-- **NestJS**
-- **Socket.IO**
-- **Prisma**
-- **PostgreSQL**
-- JWT auth
-- bcrypt
-- Cloudinary (file storage)
-- class-validator (input validation)
-
----
-
-# Architecture
-
-## REST vs Socket responsibility
-
-**REST API handles:**
-
-- Auth (register, login, logout, refresh)
-- User management
-- Friend system (CRUD)
-- Conversation creation
-- Fetching messages, conversations, notifications
-- Post CRUD
-- Feed fetching
-- Like, comment, save operations
-
-**Socket.IO handles:**
-
-- Real-time messaging
-- Typing indicators
-- Online/offline presence
-- Read receipts
-- Friend request events
-- Group management events
-- Notification delivery
-- Real-time post like and comment events (optional)
-
-## Socket rooms
-
-```
-user:{userId}                 → personal events (notifications, friend requests)
-conversation:{conversationId} → messaging events (new message, typing, read)
+### 1. Clone the Repository
+```bash
+git clone <repository_url>
+cd LinkUp/LinkUp-Backend
 ```
 
-## Socket authentication
+### 2. Install Dependencies
+```bash
+npm install
+```
 
-- WsJwtGuard verifies JWT on every socket connection
-- userId is always taken from the JWT token, never from client payload
+### 3. Setup Environment Variables
+Create a `.env` file in the root directory and add the necessary configurations:
+```env
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5432/linkup?sslmode=require"
+
+# JWT Auth
+JWT_SECRET="your_jwt_secret_key"
+JWT_REFRESH_SECRET="your_refresh_secret_key"
+
+# Gemini AI
+GEMINI_API_KEY="your_google_gemini_api_key"
+
+# Cloudinary
+CLOUDINARY_CLOUD_NAME="your_cloud_name"
+CLOUDINARY_API_KEY="your_api_key"
+CLOUDINARY_API_SECRET="your_api_secret"
+```
+
+### 4. Setup Prisma Database
+Push the schema to the database and generate the Prisma Client:
+```bash
+npx prisma db push
+npx prisma generate
+```
+
+### 5. Run the Server
+```bash
+# Development watch mode
+npm run start:dev
+```
+The API will be running at [http://localhost:3001/api/v1](http://localhost:3001/api/v1).
+Access Swagger API Docs at: [http://localhost:3001/api/docs](http://localhost:3001/api/docs)
 
 ---
 
-# Database Rules
+## 🧠 Challenges Faced
 
-## Pagination
-
-- Message list uses **cursor-based pagination** (not offset)
-- Query param: `?cursor=messageId&limit=50`
-- Feed (post list) also uses **cursor-based pagination**
-- Query param: `?cursor=postId&limit=20`
-- Comment list uses cursor-based pagination
-- Sorted by `createdAt DESC`
-- Conversation list uses offset-based pagination
-
-## Denormalization
-
-- `Conversation.lastMessageId` and `Conversation.lastMessageAt` are updated every time a new message is sent
-- Used for fast conversation list loading and sorting
-
-## Soft delete
-
-- Messages are never hard deleted from DB
-- `isDeleted: true` and `deletedAt` are set instead
-- `deletedFor` array stores userIds for "delete for me" feature
-- Posts are also soft deleted (isDeleted flag)
-
-## Block system
-
-- Before creating a direct conversation, check if either user has blocked the other
-- Before sending a message, check block status
-- Blocked users' posts are excluded from feed
-- Blocked users cannot like or comment on each other's posts
-
-## Post visibility
-
-- PUBLIC: visible to all users
-- FRIENDS: visible only to mutual friends and the post owner
-- Post owner always sees their own posts regardless of visibility
+- **pgvector Support with Prisma:** Prisma currently lacks native operational support for the `pgvector` extension. Raw SQL queries (`$queryRaw` and `$executeRaw`) were utilized to calculate Cosine Similarity (`<=>`) and perform the vector filtering dynamically.
+- **Handling Gemini Free Tier Quotas:** Generating match reasons for multiple users concurrently easily hit the 15 Requests Per Minute (RPM) free-tier limit of the Gemini Flash model. This was solved by creating a batched prompt structure and gracefully falling back to a default reason using a `try-catch` block when the limit was exceeded.
+- **Optimizing AI Searches:** Unnecessary AI rate limit hits were prevented by aggressively filtering low-scoring raw database queries *before* passing the high-quality matches to the text-generation model.
 
 ---
 
-# Response Format
+## 🚀 Future Enhancements
 
-All REST responses return a consistent shape via GlobalTransformInterceptor:
-
-```json
-{
-  "success": true,
-  "data": {},
-  "message": "ok"
-}
-```
-
----
-
-# Security
-
-- Rate limiting applied on auth routes and post creation
-- Message content sanitized against XSS before saving
-- Post content sanitized against XSS before saving
-- Refresh tokens revoked on logout (deleted from DB)
-- All DTOs validated with class-validator
-- Users can only edit or delete their own posts and comments
-
----
-
-# File Upload Flow
-
-1. Client uploads file via `POST /uploads`
-2. Server validates MIME type and file size (image: max 5MB, video: max 50MB)
-3. File is uploaded to Cloudinary
-4. Server returns `mediaUrl`
-5. For messages: client sends message with `mediaUrl`, `mimeType`, `mediaSize` fields
-6. For posts: client sends post with `mediaUrls` array (multiple files supported)
-
----
-
-# Database Tables
-
-## Chat tables
-
-```
-users
-refresh_tokens
-friend_requests
-friendships
-blocked_users
-conversations
-conversation_members
-messages
-message_reads
-reactions
-notifications
-```
-
-## Social Feed tables
-
-```
-posts
-post_likes
-post_comments
-post_comment_likes
-saved_posts
-```
-
-Total: 16 tables
+- **📞 Video & Audio Calling Feature:** Implementing a signaling server via WebSockets to establish peer-to-peer WebRTC connections for real-time video/audio communication.
+- **🔍 Redis Caching:** Introducing Redis to cache frequently searched queries and significantly speed up the vector similarity search response times.
+- **🤖 Advanced RAG Features:** Implementing Retrieval-Augmented Generation to allow interactions with an AI assistant that has contextual knowledge of the entire professional network.

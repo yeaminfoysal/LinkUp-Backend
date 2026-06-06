@@ -1,7 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmbeddingService } from './embedding.service';
@@ -110,7 +116,9 @@ export class AiDiscoveryService {
   // Natural Language User Search
   // ─────────────────────────────────────────────────────────────────────────────
 
+
   async searchUsers(query: string, currentUserId: string) {
+
     // Step 1: Collect blocked user IDs (bidirectional)
     const blocked = await this.prisma.blockedUser.findMany({
       where: {
@@ -168,96 +176,128 @@ export class AiDiscoveryService {
       LIMIT 20
     `;
 
-    // Step 4: Generate match reasons in parallel (using Genmini gpt-4o-mini)
-    const enriched = await Promise.all(
-      results.map(async (user) => {
-        const matchReason = await this.generateMatchReason({
-          bio: user.bio,
-          university: user.university,
-          department: user.department,
-          skills: user.skills,
-          interests: user.interests,
-          profession: user.profession,
-          work_place: user.work_place,
-          query,
-          score: Number(user.match_score),
-        });
+    const calculateNormalizedScore = (rawScore: number): number => {
+      if (isNaN(rawScore) || rawScore < 0) return 60;
+      // In asymmetric semantic search (short query vs long profile), raw scores are typically 60-80.
+      // We boost by +20 so the minimum valid match (60 raw) is perceived as an 80% match.
+      const boosted = rawScore + 20;
+      return boosted > 99 && rawScore < 100 ? 99 : Math.min(100, boosted);
+    };
 
-        return {
-          id: user.id,
-          name: user.name,
-          username: user.username,
-          avatar: user.avatar,
-          bio: user.bio,
-          location: user.location,
-          university: user.university,
-          department: user.department,
-          skills: user.skills,
-          interests: user.interests,
-          profession: user.profession,
-          work_place: user.work_place,
-          isOnline: user.isOnline,
-          embeddingUpdatedAt: user.embeddingUpdatedAt,
-          matchScore: Number(user.match_score),
-          matchReason,
-        };
-      }),
-    );
+    // Step 4: Map and filter high quality matches BEFORE hitting the Gemini API to save quota
+    const highQualityMatches = results.map(user => {
+      const rawScore = Number(user.match_score) || 0;
+      return {
+        ...user,
+        matchScore: calculateNormalizedScore(rawScore),
+      };
+    }).filter(user => user.matchScore >= 80);
+
+    // Step 5: Generate match reasons in a single batched API call for the remaining matches
+    const usersDataForPrompt = highQualityMatches.map(u => ({
+      bio: u.bio,
+      university: u.university,
+      department: u.department,
+      skills: u.skills,
+      interests: u.interests,
+      profession: u.profession,
+      work_place: u.work_place,
+      score: u.matchScore
+    }));
+
+    const reasons = await this.generateMatchReasonsBatch(usersDataForPrompt, query);
+
+    const enriched = highQualityMatches.map((user, index) => {
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        avatar: user.avatar,
+        bio: user.bio,
+        location: user.location,
+        university: user.university,
+        department: user.department,
+        skills: user.skills,
+        interests: user.interests,
+        profession: user.profession,
+        work_place: user.work_place,
+        isOnline: user.isOnline,
+        embeddingUpdatedAt: user.embeddingUpdatedAt,
+        matchScore: user.matchScore,
+        matchReason: reasons[index] || 'Matches your search criteria',
+      };
+    });
+
+
 
     return enriched;
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Match Reason Generator (Genmini gpt-4o-mini)
+  // Batched Match Reason Generator (Gemini 2.0 Flash)
   // ─────────────────────────────────────────────────────────────────────────────
 
-  async generateMatchReason(params: {
-    bio?: string | null;
-    university?: string | null;
-    department?: string | null;
-    skills?: string | null;
-    interests?: string | null;
-    profession?: string | null;
-    work_place?: string | null;
-    query: string;
-    score: number;
-  }): Promise<string> {
-    const {
-      bio,
-      university,
-      department,
-      skills,
-      interests,
-      profession,
-      work_place,
-      query,
-      score,
-    } = params;
+  async generateMatchReasonsBatch(
+    users: Array<{
+      bio?: string | null;
+      university?: string | null;
+      department?: string | null;
+      skills?: string | null;
+      interests?: string | null;
+      profession?: string | null;
+      work_place?: string | null;
+      score: number;
+    }>,
+    query: string,
+  ): Promise<string[]> {
+    if (users.length === 0) return [];
 
     try {
-      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+
+      const userListStr = users.map((u, i) => `User ${i + 1}:
+Bio: "${u.bio ?? ''}"
+University: "${u.university ?? ''}"
+Department: "${u.department ?? ''}"
+Skills: "${u.skills ?? ''}"
+Interests: "${u.interests ?? ''}"
+Profession: "${u.profession ?? ''}"
+Work Place: "${u.work_place ?? ''}"
+Score: ${u.score}%`).join('\n\n');
+
       const prompt = `
 Search query: "${query}"
-User bio: "${bio ?? ''}"
-User university: "${university ?? ''}"
-User department: "${department ?? ''}"
-User skills: "${skills ?? ''}"
-User interests: "${interests ?? ''}"
-User profession: "${profession ?? ''}"
-User work_place: "${work_place ?? ''}"
-Match score: ${score}%
 
-Write a 1 sentence reason why this user matches the search.
-Be specific. Max 10 words. No filler words.
-Example: "NestJS developer with strong AI interest in Dhaka"
+Here is a list of users matching the query:
+${userListStr}
+
+For EACH user, write a 1-sentence reason why they match the search. Be specific. Max 10 words per reason. No filler words.
+Return the reasons as a JSON array of strings in the exact same order as the users. DO NOT return any markdown formatting like \`\`\`json, just the raw JSON array.
+Example: ["NestJS developer with strong AI interest in Dhaka", "BUET grad working on machine learning"]
+
+
       `.trim();
 
       const result = await model.generateContent(prompt);
-      const response = result.response;
-      return response.text().trim() || 'Good match for your search';
-    } catch (error) {
-      console.error('Match reason generation failed:', error);
-      return 'Matches your search criteria';
+      const responseText = result.response.text().trim();
+
+      // Clean up potential markdown formatting if model ignores instruction
+      const cleanedJson = responseText.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/i, '').trim();
+
+      const reasons = JSON.parse(cleanedJson);
+
+      if (Array.isArray(reasons) && reasons.length === users.length) {
+        return reasons;
+      } else {
+        return users.map(() => 'Good match for your search criteria');
+      }
+    } catch (error: any) {
+      if (error?.status === 429) {
+        console.warn('⚠️ Gemini API rate limit exceeded. Falling back to default match reasons.');
+      } else {
+        console.error('⚠️ Batch match reason generation failed:', error?.message || error);
+      }
+      return users.map(() => 'Matches your search criteria');
     }
   }
 }
