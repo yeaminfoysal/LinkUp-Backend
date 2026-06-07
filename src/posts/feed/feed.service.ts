@@ -6,7 +6,7 @@ import { PostVisibility } from '../../common/enums/post-visibility.enum';
 export class FeedService {
   constructor(private prisma: PrismaService) {}
 
-  async getFeed(userId: string, cursor?: string, limit = 20) {
+  async getFeed(userId: string, filter?: string, cursor?: string, limit = 20) {
     // 1. Get user's friends
     const friendships = await this.prisma.friendship.findMany({
       where: {
@@ -27,26 +27,43 @@ export class FeedService {
     
     const blockedIds = blockedRecords.map((b) => (b.blockedById === userId ? b.blockedUserId : b.blockedById));
 
-    // 3. Build where clause
-    const whereClause: any = {
-      isDeleted: false,
-      userId: { notIn: blockedIds },
-      OR: [
+    // 3. Build where clause and orderBy based on filter
+    let whereClause: any = { isDeleted: false, userId: { notIn: blockedIds } };
+    let orderBy: any = { createdAt: 'desc' };
+
+    if (filter === 'friends') {
+      // User's own posts + Friends' posts (PUBLIC or FRIENDS)
+      whereClause.userId = { in: [userId, ...friendIds], notIn: blockedIds };
+      whereClause.OR = [
+        { visibility: PostVisibility.PUBLIC },
+        { visibility: PostVisibility.FRIENDS },
+      ];
+    } else if (filter === 'trending') {
+      // Trending: Same visibility as For You, but ordered by likes
+      whereClause.OR = [
         { userId }, // Own posts
         { visibility: PostVisibility.PUBLIC }, // Public posts
-        {
-          visibility: PostVisibility.FRIENDS, // Friends posts
-          userId: { in: friendIds },
-        },
-      ],
-    };
+        { visibility: PostVisibility.FRIENDS, userId: { in: friendIds } },
+      ];
+      orderBy = [
+        { likes: { _count: 'desc' } },
+        { createdAt: 'desc' }
+      ];
+    } else {
+      // Default: 'for-you'
+      whereClause.OR = [
+        { userId }, // Own posts
+        { visibility: PostVisibility.PUBLIC }, // Public posts
+        { visibility: PostVisibility.FRIENDS, userId: { in: friendIds } },
+      ];
+    }
 
     // 4. Fetch posts
     const posts = await this.prisma.post.findMany({
       where: whereClause,
       take: limit + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       include: {
         user: { select: { id: true, name: true, username: true, avatar: true } },
         _count: { select: { likes: true, comments: { where: { isDeleted: false } } } },

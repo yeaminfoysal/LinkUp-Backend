@@ -148,6 +148,9 @@ export class ConversationsService {
             type: true,
             senderId: true,
             createdAt: true,
+            reads: {
+              select: { userId: true },
+            },
           },
         },
       },

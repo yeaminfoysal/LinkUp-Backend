@@ -25,14 +25,16 @@ export class PostsController {
 
   @Get('feed')
   @ApiOperation({ summary: 'Get social feed' })
+  @ApiQuery({ name: 'filter', required: false })
   @ApiQuery({ name: 'cursor', required: false })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   getFeed(
     @CurrentUser('id') userId: string,
+    @Query('filter') filter?: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: number,
   ) {
-    return this.feedService.getFeed(userId, cursor, limit ? Number(limit) : 20);
+    return this.feedService.getFeed(userId, filter, cursor, limit ? Number(limit) : 20);
   }
 
   @Get('user/:targetUserId')

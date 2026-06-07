@@ -164,13 +164,30 @@ export class MessagesService {
   }
 
   async markAsRead(userId: string, conversationId: string, messageId: string) {
-    const read = await this.prisma.messageRead.upsert({
-      where: { messageId_userId: { messageId, userId } },
-      create: { messageId, userId },
-      update: {},
-      select: { messageId: true, userId: true, readAt: true },
+    const unreadMessages = await this.prisma.message.findMany({
+      where: {
+        conversationId,
+        senderId: { not: userId },
+        NOT: {
+          reads: {
+            some: { userId },
+          },
+        },
+      },
+      select: { id: true },
     });
-    return read;
+
+    if (unreadMessages.length > 0) {
+      await this.prisma.messageRead.createMany({
+        data: unreadMessages.map((m) => ({
+          messageId: m.id,
+          userId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    return { messageId, userId, readAt: new Date() };
   }
 
   async reactToMessage(userId: string, messageId: string, emoji: string) {
