@@ -1,8 +1,7 @@
-<div align="center">
-  <img src="https://via.placeholder.com/150/8b5cf6/ffffff?text=LinkUp" alt="LinkUp Logo" width="150" height="150" />
+<div align="left">
   <h1>🚀 LinkUp - Backend</h1>
   <p>
-    The LinkUp backend is a robust, highly scalable API built with NestJS that serves as the core engine for an AI-driven professional networking platform. It seamlessly integrates Postgres <code>pgvector</code> and Google Gemini AI to deliver lightning-fast semantic searches and dynamic match reasoning. Paired with an event-driven WebSocket architecture, it ensures secure, real-time communication and flawless data synchronization across the entire network.
+    The LinkUp backend is a robust, highly scalable API built with NestJS that serves as the core engine for an AI-driven professional networking platform. It integrates PostgreSQL <code>pgvector</code> and Google Gemini AI for semantic discovery, combined with a deterministic, word-overlapping "Smart Matches" engine to suggest connections based on shared profile details. Paired with an event-driven WebSocket architecture, it ensures secure, real-time communication and flawless data synchronization across the entire network.
   </p>
 </div>
 
@@ -14,6 +13,11 @@
 The backend utilizes a sophisticated two-step AI pipeline to deliver highly accurate search results:
 - **Vector Semantic Search:** User profiles are converted into high-dimensional (1536-dim) vector embeddings. Using **Postgres `pgvector`**, blazing-fast **Cosine Similarity** queries are performed to find contextual matches rather than just keyword matches.
 - **Generative AI Match Reasoning:** Once matches are found, they are batch processed through the **Google Gemini 2.5 Flash** model to dynamically generate personalized, 1-sentence explanations of *why* the user fits the specific search criteria.
+
+### ⚡ Deterministic "Smart Matches" Engine
+In addition to vector-based semantic search, the backend runs a cost-effective, deterministic profile-matching engine:
+- **Profile Field Overlap:** Matches candidate profiles by parsing and comparing words in fields such as `profession`, `location`, `university`, `department`, `skills`, `interests`, and `work_place`, filtering out generic filler terms (stop-words).
+- **Rule-Based Explanation Builder:** Computes match scores out of 100% and generates precise mutual connection descriptions (e.g., *"You both study/studied at Northern University and live in Dhaka."*) without triggering external LLM APIs, ensuring zero token cost.
 
 ### ⚡ Event-Driven Real-Time Engine
 A robust WebSocket architecture ensures the app feels alive and instantaneous.
