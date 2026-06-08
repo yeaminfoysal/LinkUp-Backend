@@ -136,7 +136,7 @@ export class UsersService {
     return users;
   }
 
-  async getSuggestions(userId: string, limit: number) {
+  async getSuggestions(userId: string, limit: number, isGlobal: boolean = false) {
     // 1. Get blocked user IDs
     const blocks = await this.prisma.blockedUser.findMany({
       where: {
@@ -238,7 +238,11 @@ export class UsersService {
     const candidates = await this.prisma.user.findMany({
       where: {
         id: { notIn: excludeIds },
-        OR: OR_conditions.length > 0 ? OR_conditions : fallbackConditions,
+        ...(isGlobal
+          ? {}
+          : OR_conditions.length > 0
+            ? { OR: OR_conditions }
+            : { OR: fallbackConditions }),
       },
       select: {
         id: true,
@@ -350,8 +354,9 @@ export class UsersService {
 
       score = Math.min(100, score);
 
-      if (score === 0) {
-        score = 40 + (candidate.name.charCodeAt(0) % 10);
+      if (score > 0) {
+        // Base boost to ensure meaningful matches reflect a high percentage (>= 50%)
+        score = Math.min(100, 50 + score);
       }
 
       const reason = buildMatchReason(matchingDetails, candidate);
@@ -365,8 +370,30 @@ export class UsersService {
       };
     });
 
-    scoredCandidates.sort((a, b) => b.matchScore - a.matchScore);
-    return scoredCandidates.slice(0, limit);
+    // Filter out users who have 0 matching fields unless it's global mode
+    let validCandidates = scoredCandidates;
+    if (!isGlobal) {
+      validCandidates = scoredCandidates.filter((candidate) => candidate.matchScore > 0);
+    } else {
+      validCandidates = scoredCandidates.map(candidate => {
+        if (candidate.matchScore === 0) {
+          return {
+            ...candidate,
+            matchScore: 0,
+            matchReason: 'Suggested based on global network activity.',
+          };
+        }
+        return candidate;
+      });
+    }
+
+    validCandidates.sort((a, b) => {
+      if (a.matchScore === b.matchScore && a.matchScore === 0) {
+        return Math.random() - 0.5;
+      }
+      return b.matchScore - a.matchScore;
+    });
+    return validCandidates.slice(0, limit);
   }
 
   async getProfileByUsername(username: string, requesterId: string) {

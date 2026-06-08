@@ -45,9 +45,11 @@ export class UsersController {
   getSuggestions(
     @CurrentUser() user: { id: string },
     @Query('limit') limit?: string,
+    @Query('global') global?: string,
   ) {
     const limitNum = limit ? parseInt(limit, 10) : 4;
-    return this.usersService.getSuggestions(user.id, limitNum);
+    const isGlobal = global === 'true';
+    return this.usersService.getSuggestions(user.id, limitNum, isGlobal);
   }
 
   @Get('profile/:username')
