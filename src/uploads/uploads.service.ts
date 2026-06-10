@@ -6,9 +6,19 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_AUDIO_SIZE = 20 * 1024 * 1024; // 20MB
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg'];
-const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm'];
+const ALLOWED_AUDIO_TYPES = [
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'audio/webm',
+];
 const ALLOWED_FILE_TYPES = ['application/pdf', 'text/plain'];
 
 @Injectable()
@@ -20,7 +30,12 @@ export class UploadsService {
   async uploadFile(
     file: Express.Multer.File,
     folder = 'nexchat',
-  ): Promise<{ mediaUrl: string; publicId: string; format: string; bytes: number }> {
+  ): Promise<{
+    mediaUrl: string;
+    publicId: string;
+    format: string;
+    bytes: number;
+  }> {
     const mediaType = file.mimetype;
 
     // Validate size
@@ -57,7 +72,9 @@ export class UploadsService {
           { folder, resource_type: resourceType as 'image' | 'video' | 'raw' },
           (error, result) => {
             if (error || !result) {
-              reject(new BadRequestException(error?.message ?? 'Upload failed'));
+              reject(
+                new BadRequestException(error?.message ?? 'Upload failed'),
+              );
               return;
             }
             const res = result as UploadApiResponse;
@@ -76,11 +93,13 @@ export class UploadsService {
   async uploadMultipleFiles(
     files: Express.Multer.File[],
     folder = 'nexchat',
-  ): Promise<{ mediaUrl: string; publicId: string; format: string; bytes: number }[]> {
+  ): Promise<
+    { mediaUrl: string; publicId: string; format: string; bytes: number }[]
+  > {
     if (!files || files.length === 0) {
       throw new BadRequestException('No files provided');
     }
-    
+
     // Upload all files concurrently
     const uploadPromises = files.map((file) => this.uploadFile(file, folder));
     return Promise.all(uploadPromises);

@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -15,10 +20,13 @@ export class PostsService {
   ) {}
 
   async createPost(userId: string, createPostDto: CreatePostDto) {
-    if (!createPostDto.content && (!createPostDto.mediaUrls || createPostDto.mediaUrls.length === 0)) {
+    if (
+      !createPostDto.content &&
+      (!createPostDto.mediaUrls || createPostDto.mediaUrls.length === 0)
+    ) {
       throw new BadRequestException('Post must contain content or media');
     }
-    
+
     return this.prisma.post.create({
       data: {
         userId,
@@ -27,7 +35,9 @@ export class PostsService {
         visibility: createPostDto.visibility,
       },
       include: {
-        user: { select: { id: true, name: true, username: true, avatar: true } },
+        user: {
+          select: { id: true, name: true, username: true, avatar: true },
+        },
       },
     });
   }
@@ -36,8 +46,12 @@ export class PostsService {
     const post = await this.prisma.post.findUnique({
       where: { id: postId, isDeleted: false },
       include: {
-        user: { select: { id: true, name: true, username: true, avatar: true } },
-        _count: { select: { likes: true, comments: { where: { isDeleted: false } } } },
+        user: {
+          select: { id: true, name: true, username: true, avatar: true },
+        },
+        _count: {
+          select: { likes: true, comments: { where: { isDeleted: false } } },
+        },
       },
     });
 
@@ -45,10 +59,15 @@ export class PostsService {
     return post;
   }
 
-  async updatePost(userId: string, postId: string, updatePostDto: UpdatePostDto) {
+  async updatePost(
+    userId: string,
+    postId: string,
+    updatePostDto: UpdatePostDto,
+  ) {
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post || post.isDeleted) throw new NotFoundException('Post not found');
-    if (post.userId !== userId) throw new ForbiddenException('You can only edit your own post');
+    if (post.userId !== userId)
+      throw new ForbiddenException('You can only edit your own post');
 
     return this.prisma.post.update({
       where: { id: postId },
@@ -59,7 +78,8 @@ export class PostsService {
   async deletePost(userId: string, postId: string) {
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (!post || post.isDeleted) throw new NotFoundException('Post not found');
-    if (post.userId !== userId) throw new ForbiddenException('You can only delete your own post');
+    if (post.userId !== userId)
+      throw new ForbiddenException('You can only delete your own post');
 
     return this.prisma.post.update({
       where: { id: postId },
@@ -68,7 +88,9 @@ export class PostsService {
   }
 
   async likePost(userId: string, postId: string) {
-    const post = await this.prisma.post.findUnique({ where: { id: postId, isDeleted: false } });
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId, isDeleted: false },
+    });
     if (!post) throw new NotFoundException('Post not found');
 
     // Avoid duplicate likes
@@ -88,12 +110,17 @@ export class PostsService {
           NotificationType.POST_LIKED,
           user.name,
           `${user.name} liked your post`,
-          { postId, likedBy: userId }
+          { postId, likedBy: userId },
         );
 
         this.notificationsGateway.emitPostLiked(post.userId, {
           postId,
-          likedBy: { id: user.id, name: user.name, username: user.username, avatar: user.avatar },
+          likedBy: {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            avatar: user.avatar,
+          },
         });
       }
     }
@@ -111,14 +138,19 @@ export class PostsService {
 
     const post = await this.prisma.post.findUnique({ where: { id: postId } });
     if (post && post.userId !== userId) {
-      this.notificationsGateway.emitPostUnliked(post.userId, { postId, unlikedBy: userId });
+      this.notificationsGateway.emitPostUnliked(post.userId, {
+        postId,
+        unlikedBy: userId,
+      });
     }
 
     return { message: 'Post unliked' };
   }
 
   async savePost(userId: string, postId: string) {
-    const post = await this.prisma.post.findUnique({ where: { id: postId, isDeleted: false } });
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId, isDeleted: false },
+    });
     if (!post) throw new NotFoundException('Post not found');
 
     const existing = await this.prisma.savedPost.findUnique({

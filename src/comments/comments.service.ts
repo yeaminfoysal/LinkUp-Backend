@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
@@ -13,8 +17,14 @@ export class CommentsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  async createComment(userId: string, postId: string, createCommentDto: CreateCommentDto) {
-    const post = await this.prisma.post.findUnique({ where: { id: postId, isDeleted: false } });
+  async createComment(
+    userId: string,
+    postId: string,
+    createCommentDto: CreateCommentDto,
+  ) {
+    const post = await this.prisma.post.findUnique({
+      where: { id: postId, isDeleted: false },
+    });
     if (!post) throw new NotFoundException('Post not found');
 
     if (createCommentDto.parentId) {
@@ -32,7 +42,9 @@ export class CommentsService {
         parentId: createCommentDto.parentId || null,
       },
       include: {
-        user: { select: { id: true, name: true, username: true, avatar: true } },
+        user: {
+          select: { id: true, name: true, username: true, avatar: true },
+        },
       },
     });
 
@@ -45,7 +57,7 @@ export class CommentsService {
           NotificationType.POST_COMMENTED,
           user.name,
           `${user.name} commented on your post`,
-          { postId, commentId: comment.id, commentedBy: userId }
+          { postId, commentId: comment.id, commentedBy: userId },
         );
 
         this.notificationsGateway.emitPostCommented(post.userId, {
@@ -65,8 +77,12 @@ export class CommentsService {
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       orderBy: { createdAt: 'desc' },
       include: {
-        user: { select: { id: true, name: true, username: true, avatar: true } },
-        _count: { select: { likes: true, replies: { where: { isDeleted: false } } } },
+        user: {
+          select: { id: true, name: true, username: true, avatar: true },
+        },
+        _count: {
+          select: { likes: true, replies: { where: { isDeleted: false } } },
+        },
       },
     });
 
@@ -76,27 +92,36 @@ export class CommentsService {
 
     return { items, nextCursor, hasNextPage };
   }
-  
+
   async deleteComment(userId: string, id: string) {
     const comment = await this.prisma.postComment.findUnique({ where: { id } });
-    if (!comment || comment.isDeleted) throw new NotFoundException('Comment not found');
-    if (comment.userId !== userId) throw new ForbiddenException('You can only delete your own comment');
+    if (!comment || comment.isDeleted)
+      throw new NotFoundException('Comment not found');
+    if (comment.userId !== userId)
+      throw new ForbiddenException('You can only delete your own comment');
 
     await this.prisma.postComment.update({
       where: { id },
       data: { isDeleted: true, deletedAt: new Date() },
     });
 
-    const post = await this.prisma.post.findUnique({ where: { id: comment.postId } });
+    const post = await this.prisma.post.findUnique({
+      where: { id: comment.postId },
+    });
     if (post && post.userId !== userId) {
-      this.notificationsGateway.emitPostCommentDeleted(post.userId, { postId: comment.postId, commentId: id });
+      this.notificationsGateway.emitPostCommentDeleted(post.userId, {
+        postId: comment.postId,
+        commentId: id,
+      });
     }
 
     return { message: 'Comment deleted' };
   }
 
   async likeComment(userId: string, id: string) {
-    const comment = await this.prisma.postComment.findUnique({ where: { id, isDeleted: false } });
+    const comment = await this.prisma.postComment.findUnique({
+      where: { id, isDeleted: false },
+    });
     if (!comment) throw new NotFoundException('Comment not found');
 
     const existingLike = await this.prisma.postCommentLike.findUnique({
@@ -104,7 +129,9 @@ export class CommentsService {
     });
     if (existingLike) return { message: 'Already liked' };
 
-    await this.prisma.postCommentLike.create({ data: { commentId: id, userId } });
+    await this.prisma.postCommentLike.create({
+      data: { commentId: id, userId },
+    });
 
     // Notify comment owner
     if (comment.userId !== userId) {
@@ -115,13 +142,18 @@ export class CommentsService {
           NotificationType.POST_COMMENT_LIKED,
           user.name,
           `${user.name} liked your comment`,
-          { postId: comment.postId, commentId: id, likedBy: userId }
+          { postId: comment.postId, commentId: id, likedBy: userId },
         );
 
         this.notificationsGateway.emitPostCommentLiked(comment.userId, {
           postId: comment.postId,
           commentId: id,
-          likedBy: { id: user.id, name: user.name, username: user.username, avatar: user.avatar },
+          likedBy: {
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            avatar: user.avatar,
+          },
         });
       }
     }
@@ -139,7 +171,11 @@ export class CommentsService {
 
     const comment = await this.prisma.postComment.findUnique({ where: { id } });
     if (comment && comment.userId !== userId) {
-       this.notificationsGateway.emitPostCommentUnliked(comment.userId, { postId: comment.postId, commentId: id, unlikedBy: userId });
+      this.notificationsGateway.emitPostCommentUnliked(comment.userId, {
+        postId: comment.postId,
+        commentId: id,
+        unlikedBy: userId,
+      });
     }
 
     return { message: 'Comment unliked' };

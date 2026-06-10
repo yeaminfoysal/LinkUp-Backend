@@ -14,8 +14,10 @@ export class FeedService {
       },
       select: { user1Id: true, user2Id: true },
     });
-    
-    const friendIds = friendships.map((f) => (f.user1Id === userId ? f.user2Id : f.user1Id));
+
+    const friendIds = friendships.map((f) =>
+      f.user1Id === userId ? f.user2Id : f.user1Id,
+    );
 
     // 2. Get blocked users
     const blockedRecords = await this.prisma.blockedUser.findMany({
@@ -24,8 +26,10 @@ export class FeedService {
       },
       select: { blockedById: true, blockedUserId: true },
     });
-    
-    const blockedIds = blockedRecords.map((b) => (b.blockedById === userId ? b.blockedUserId : b.blockedById));
+
+    const blockedIds = blockedRecords.map((b) =>
+      b.blockedById === userId ? b.blockedUserId : b.blockedById,
+    );
 
     // 3. Build where clause and orderBy based on filter
     let whereClause: any = { isDeleted: false, userId: { notIn: blockedIds } };
@@ -45,10 +49,7 @@ export class FeedService {
         { visibility: PostVisibility.PUBLIC }, // Public posts
         { visibility: PostVisibility.FRIENDS, userId: { in: friendIds } },
       ];
-      orderBy = [
-        { likes: { _count: 'desc' } },
-        { createdAt: 'desc' }
-      ];
+      orderBy = [{ likes: { _count: 'desc' } }, { createdAt: 'desc' }];
     } else {
       // Default: 'for-you'
       whereClause.OR = [
@@ -65,8 +66,12 @@ export class FeedService {
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       orderBy,
       include: {
-        user: { select: { id: true, name: true, username: true, avatar: true } },
-        _count: { select: { likes: true, comments: { where: { isDeleted: false } } } },
+        user: {
+          select: { id: true, name: true, username: true, avatar: true },
+        },
+        _count: {
+          select: { likes: true, comments: { where: { isDeleted: false } } },
+        },
         likes: {
           where: { userId },
           select: { userId: true },
@@ -98,7 +103,12 @@ export class FeedService {
     };
   }
 
-  async getUserPosts(viewerId: string, targetUserId: string, cursor?: string, limit = 20) {
+  async getUserPosts(
+    viewerId: string,
+    targetUserId: string,
+    cursor?: string,
+    limit = 20,
+  ) {
     // Check block status
     const isBlocked = await this.prisma.blockedUser.findFirst({
       where: {
@@ -130,7 +140,9 @@ export class FeedService {
 
     if (viewerId !== targetUserId) {
       if (isFriend) {
-        whereClause.visibility = { in: [PostVisibility.PUBLIC, PostVisibility.FRIENDS] };
+        whereClause.visibility = {
+          in: [PostVisibility.PUBLIC, PostVisibility.FRIENDS],
+        };
       } else {
         whereClause.visibility = PostVisibility.PUBLIC;
       }
@@ -142,8 +154,12 @@ export class FeedService {
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       orderBy: { createdAt: 'desc' },
       include: {
-        user: { select: { id: true, name: true, username: true, avatar: true } },
-        _count: { select: { likes: true, comments: { where: { isDeleted: false } } } },
+        user: {
+          select: { id: true, name: true, username: true, avatar: true },
+        },
+        _count: {
+          select: { likes: true, comments: { where: { isDeleted: false } } },
+        },
         likes: {
           where: { userId: viewerId },
           select: { userId: true },
@@ -184,8 +200,15 @@ export class FeedService {
       include: {
         post: {
           include: {
-            user: { select: { id: true, name: true, username: true, avatar: true } },
-            _count: { select: { likes: true, comments: { where: { isDeleted: false } } } },
+            user: {
+              select: { id: true, name: true, username: true, avatar: true },
+            },
+            _count: {
+              select: {
+                likes: true,
+                comments: { where: { isDeleted: false } },
+              },
+            },
             likes: {
               where: { userId },
               select: { userId: true },

@@ -1,11 +1,26 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { FeedService } from './feed/feed.service';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { ApiBearerAuth, ApiTags, ApiQuery, ApiOperation } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiQuery,
+  ApiOperation,
+} from '@nestjs/swagger';
 
 @ApiTags('Posts')
 @ApiBearerAuth()
@@ -19,7 +34,10 @@ export class PostsController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new post' })
-  create(@CurrentUser('id') userId: string, @Body() createPostDto: CreatePostDto) {
+  create(
+    @CurrentUser('id') userId: string,
+    @Body() createPostDto: CreatePostDto,
+  ) {
     return this.postsService.createPost(userId, createPostDto);
   }
 
@@ -34,7 +52,12 @@ export class PostsController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: number,
   ) {
-    return this.feedService.getFeed(userId, filter, cursor, limit ? Number(limit) : 20);
+    return this.feedService.getFeed(
+      userId,
+      filter,
+      cursor,
+      limit ? Number(limit) : 20,
+    );
   }
 
   @Get('user/:targetUserId')
@@ -47,7 +70,12 @@ export class PostsController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: number,
   ) {
-    return this.feedService.getUserPosts(userId, targetUserId, cursor, limit ? Number(limit) : 20);
+    return this.feedService.getUserPosts(
+      userId,
+      targetUserId,
+      cursor,
+      limit ? Number(limit) : 20,
+    );
   }
 
   @Get('saved')
@@ -59,7 +87,11 @@ export class PostsController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: number,
   ) {
-    return this.feedService.getSavedPosts(userId, cursor, limit ? Number(limit) : 20);
+    return this.feedService.getSavedPosts(
+      userId,
+      cursor,
+      limit ? Number(limit) : 20,
+    );
   }
 
   @Get(':id')

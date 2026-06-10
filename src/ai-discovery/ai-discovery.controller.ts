@@ -1,12 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-import {
-  Body,
-  Controller,
-  Param,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Param, Patch, Post } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -40,7 +34,10 @@ export class AiDiscoveryController {
     status: 200,
     description: 'Ranked list of matching users with match scores and reasons',
   })
-  @ApiResponse({ status: 503, description: 'AI service temporarily unavailable' })
+  @ApiResponse({
+    status: 503,
+    description: 'AI service temporarily unavailable',
+  })
   async searchUsers(
     @Body() dto: SearchUsersDto,
     @CurrentUser() user: { id: string },

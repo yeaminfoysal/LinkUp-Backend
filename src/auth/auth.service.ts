@@ -18,7 +18,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-  ) { }
+  ) {}
 
   async register(dto: RegisterDto) {
     const existingEmail = await this.prisma.user.findUnique({
@@ -52,6 +52,7 @@ export class AuthService {
         avatar: true,
         bio: true,
         createdAt: true,
+        role: true,
       },
     });
 
@@ -106,7 +107,9 @@ export class AuthService {
   async refreshTokens(userId: string, email: string, tokenId: string) {
     // Delete the old token (rotate)
     // eslint-disable-next-line prettier/prettier
-    await this.prisma.refreshToken.delete({ where: { id: tokenId } }).catch(() => null);
+    await this.prisma.refreshToken
+      .delete({ where: { id: tokenId } })
+      .catch(() => null);
 
     const tokens = await this.generateTokens({ sub: userId, email });
     await this.storeRefreshToken(userId, tokens.refreshToken);

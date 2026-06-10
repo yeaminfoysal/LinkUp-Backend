@@ -56,7 +56,8 @@ export class NotificationsService {
     });
     if (!notification) throw new NotFoundException('Notification not found');
     // eslint-disable-next-line prettier/prettier
-    if (notification.userId !== userId) throw new NotFoundException('Notification not found');
+    if (notification.userId !== userId)
+      throw new NotFoundException('Notification not found');
 
     return this.prisma.notification.update({
       where: { id: notificationId },

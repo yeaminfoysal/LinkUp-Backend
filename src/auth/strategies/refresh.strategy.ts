@@ -15,7 +15,10 @@ export class RefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
     });
   }
 
-  async validate(req: Request & { body: { refreshToken: string } }, payload: JwtPayload) {
+  async validate(
+    req: Request & { body: { refreshToken: string } },
+    payload: JwtPayload,
+  ) {
     const token = req.body.refreshToken;
     const stored = await this.prisma.refreshToken.findUnique({
       where: { token },

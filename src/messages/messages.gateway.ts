@@ -65,7 +65,10 @@ export class MessagesGateway {
     @MessageBody() data: { messageId: string },
   ) {
     const userId = client.data.userId as string;
-    const deleted = await this.messagesService.deleteMessage(data.messageId, userId);
+    const deleted = await this.messagesService.deleteMessage(
+      data.messageId,
+      userId,
+    );
 
     this.server
       .to(`conversation:${deleted.conversationId}`)
@@ -89,13 +92,11 @@ export class MessagesGateway {
       data.messageId,
     );
 
-    this.server
-      .to(`conversation:${data.conversationId}`)
-      .emit('message_read', {
-        messageId: read.messageId,
-        readBy: read.userId,
-        readAt: read.readAt,
-      });
+    this.server.to(`conversation:${data.conversationId}`).emit('message_read', {
+      messageId: read.messageId,
+      readBy: read.userId,
+      readAt: read.readAt,
+    });
 
     return { event: 'message_read', data: read };
   }
@@ -119,7 +120,10 @@ export class MessagesGateway {
     const userId = client.data.userId as string;
     client
       .to(`conversation:${data.conversationId}`)
-      .emit('user_stop_typing', { userId, conversationId: data.conversationId });
+      .emit('user_stop_typing', {
+        userId,
+        conversationId: data.conversationId,
+      });
   }
 
   @SubscribeMessage('react_to_message')
@@ -165,7 +169,11 @@ export class MessagesGateway {
       select: { conversationId: true },
     });
 
-    await this.messagesService.removeReaction(userId, data.messageId, data.emoji);
+    await this.messagesService.removeReaction(
+      userId,
+      data.messageId,
+      data.emoji,
+    );
 
     if (message) {
       this.server

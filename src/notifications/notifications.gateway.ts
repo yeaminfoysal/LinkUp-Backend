@@ -12,7 +12,9 @@ export class NotificationsGateway {
   server: Server;
 
   emitNotification(userId: string, notification: Record<string, unknown>) {
-    this.server.to(`user:${userId}`).emit('notification_received', notification);
+    this.server
+      .to(`user:${userId}`)
+      .emit('notification_received', notification);
   }
 
   emitUnreadCount(userId: string, conversationId: string, unreadCount: number) {

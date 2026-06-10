@@ -12,14 +12,16 @@ export class EmbeddingService {
    */
   async generateEmbedding(text: string): Promise<number[] | null> {
     try {
-      const model = this.genAI.getGenerativeModel({ model: 'gemini-embedding-2' });
+      const model = this.genAI.getGenerativeModel({
+        model: 'gemini-embedding-2',
+      });
       // Pass outputDimensionality so the model natively projects it to 1536 dims
       const result = await model.embedContent({
         content: { role: 'user', parts: [{ text }] },
-        outputDimensionality: 1536
+        outputDimensionality: 1536,
       } as any);
       const embedding = result.embedding.values;
-      
+
       return embedding as number[];
     } catch (error) {
       console.error('Embedding generation failed:', error);
