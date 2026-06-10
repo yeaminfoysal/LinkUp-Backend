@@ -93,7 +93,9 @@ model User {
   updatedAt DateTime @updatedAt
 
   // Auth
-  refreshTokens RefreshToken[]
+  resetPasswordToken   String?
+  resetPasswordExpires DateTime?
+  refreshTokens        RefreshToken[]
 
   // Friend system
   sentFriendRequests     FriendRequest[] @relation("SentFriendRequests")

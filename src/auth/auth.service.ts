@@ -7,7 +7,13 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import * as nodemailer from 'nodemailer';
+import * as dns from 'dns';
 import { PrismaService } from '../prisma/prisma.service';
+
+// Force Node.js to prefer IPv4 over IPv6. This fixes the 'ENETUNREACH' error on Render and other cloud providers.
+dns.setDefaultResultOrder('ipv4first');
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -87,7 +93,6 @@ export class AuthService {
 
     await this.storeRefreshToken(user.id, tokens.refreshToken);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _pw, ...safeUser } = user;
     return { user: safeUser, ...tokens };
   }
@@ -106,7 +111,6 @@ export class AuthService {
 
   async refreshTokens(userId: string, email: string, tokenId: string) {
     // Delete the old token (rotate)
-    // eslint-disable-next-line prettier/prettier
     await this.prisma.refreshToken
       .delete({ where: { id: tokenId } })
       .catch(() => null);
@@ -115,6 +119,95 @@ export class AuthService {
     await this.storeRefreshToken(userId, tokens.refreshToken);
 
     return tokens;
+  }
+
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      // Return success even if user not found to prevent email enumeration
+      return { message: 'If that email exists, a reset link has been sent.' };
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetPasswordExpires = new Date(Date.now() + 3600000); // 1 hour
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordToken: resetToken,
+        resetPasswordExpires,
+      },
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/reset-password?token=${resetToken}`;
+
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: false, // true for 465, false for other ports like 587
+      auth: {
+        user: process.env.SMTP_USER?.trim(),
+        pass: process.env.SMTP_PASS?.trim(),
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+
+    const mailOptions = {
+      from: `"LinkUp Support" <${process.env.SMTP_USER}>`,
+      to: user.email,
+      subject: 'Password Reset Request',
+      text: `You requested a password reset. Please click on the following link to reset your password: \n\n ${resetUrl} \n\n If you did not request this, please ignore this email.`,
+      html: `
+        <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto;">
+          <h2>Password Reset Request</h2>
+          <p>You requested a password reset. Please click the button below to set a new password:</p>
+          <a href="${resetUrl}" style="display: inline-block; padding: 10px 20px; background-color: #8b5cf6; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">Reset Password</a>
+          <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not request this, you can safely ignore this email.</p>
+        </div>
+      `,
+    };
+
+    try {
+      await transporter.sendMail(mailOptions);
+    } catch (error) {
+      console.error('Error sending reset email:', error);
+      // Optional: Handle error gracefully, or throw it.
+    }
+
+    return { message: 'If that email exists, a reset link has been sent.' };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        resetPasswordToken: token,
+        resetPasswordExpires: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Password reset token is invalid or has expired.');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      },
+    });
+
+    // Optionally revoke all refresh tokens so other sessions are logged out
+    await this.prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+
+    return { message: 'Password has been successfully reset.' };
   }
 
   private async generateTokens(payload: JwtPayload) {
