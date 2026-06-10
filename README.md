@@ -3,6 +3,10 @@
   <p>
     The LinkUp backend is a robust, highly scalable API built with NestJS that serves as the core engine for an AI-driven professional networking platform. It integrates PostgreSQL <code>pgvector</code> and Google Gemini AI for semantic discovery, combined with a deterministic, word-overlapping "Smart Matches" engine to suggest connections based on shared profile details. Paired with an event-driven WebSocket architecture, it ensures secure, real-time communication and flawless data synchronization across the entire network.
   </p>
+    <p>
+    <strong>🌍 Live Application:</strong> <a href="https://link-up-seven-iota.vercel.app">https://link-up-seven-iota.vercel.app</a><br/>
+    <strong>⚙️ Frontend Repository:</strong> <a href="https://github.com/yeaminfoysal/LinkUp-Frontend">LinkUp-Frontend</a>
+  </p>
 </div>
 
 ---

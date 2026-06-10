@@ -23,6 +23,7 @@ import { AppService } from './app.service';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     PostsModule,
     CommentsModule,
     AiDiscoveryModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

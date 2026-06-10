@@ -23,7 +23,7 @@ export class FriendsGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   constructor(
     @Inject(forwardRef(() => FriendsService))
@@ -36,26 +36,26 @@ export class FriendsGateway
   async handleConnection(client: Socket) {
     try {
       const token =
-        (client.handshake.auth?.token as string) ||
+        (client.handshake.auth?.token as string | undefined) ||
         (client.handshake.headers?.authorization?.replace('Bearer ', '') ?? '');
       if (!token) {
         client.disconnect();
         return;
       }
 
-      const payload = this.jwtService.verify(token, {
-        secret: process.env.JWT_ACCESS_SECRET,
+      const payload = this.jwtService.verify<{ sub: string; email: string }>(token, {
+        secret: process.env.JWT_ACCESS_SECRET || '',
       });
-      const userId = payload.sub as string;
+      const userId = payload.sub;
       client.data.userId = userId;
-      client.data.email = payload.email as string;
+      client.data.email = payload.email;
       this.socketState.addSocket(userId, client.id);
       await client.join(`user:${userId}`);
       await this.usersService.setOnlineStatus(userId, true);
       this.server.emit('user_online', { userId });
 
       console.log(`✅ User connected: ${userId}`);
-    } catch (error) {
+    } catch {
       console.log('❌ Connection unauthorized');
       client.disconnect();
     }

@@ -12,6 +12,11 @@ datasource db {
 // Enums
 // ─────────────────────────────────────────
 
+enum Role {
+  USER
+  SUPER_ADMIN
+}
+
 enum FriendRequestStatus {
   PENDING
   ACCEPTED
@@ -65,6 +70,7 @@ model User {
   password String
   avatar   String?
   bio      String?
+  role     Role    @default(USER)
 
   // Extended profile fields for AI discovery
   location   String?
