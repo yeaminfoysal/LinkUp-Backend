@@ -66,7 +66,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Refresh access token using refresh token' })
   @ApiResponse({ status: 200, description: 'Tokens refreshed' })
   refreshTokens(
-    @Request() req: { user: { userId: string; email: string; tokenId: string } },
+    @Request()
+    req: {
+      user: { userId: string; email: string; tokenId: string };
+    },
   ) {
     return this.authService.refreshTokens(
       req.user.userId,

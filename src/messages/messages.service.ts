@@ -15,7 +15,6 @@ import { NotificationType } from '../common/enums/notification-type.enum.js';
 import { SendMessageDto } from './dto/send-message.dto.js';
 import { buildCursorPagination } from '../common/utils/pagination.util.js';
 
-
 const MESSAGE_SELECT = {
   id: true,
   conversationId: true,
@@ -88,7 +87,8 @@ export class MessagesService {
             ],
           },
         });
-        if (block) throw new ForbiddenException('Cannot send message to this user');
+        if (block)
+          throw new ForbiddenException('Cannot send message to this user');
       }
     }
 
@@ -118,7 +118,9 @@ export class MessagesService {
     });
 
     // Notify other members
-    const otherMembers = conversation.members.filter((m) => m.userId !== userId);
+    const otherMembers = conversation.members.filter(
+      (m) => m.userId !== userId,
+    );
     await Promise.all(
       otherMembers.map((m) =>
         this.notificationsService.createNotification(
@@ -126,7 +128,11 @@ export class MessagesService {
           NotificationType.NEW_MESSAGE,
           message.sender.name,
           sanitizedContent ?? `Sent a ${dto.type.toLowerCase()}`,
-          { conversationId: dto.conversationId, senderId: userId, messageId: message.id },
+          {
+            conversationId: dto.conversationId,
+            senderId: userId,
+            messageId: message.id,
+          },
         ),
       ),
     );
@@ -139,8 +145,10 @@ export class MessagesService {
       where: { id: messageId },
     });
     if (!message) throw new NotFoundException('Message not found');
-    if (message.senderId !== userId) throw new ForbiddenException('Not authorized');
-    if (message.isDeleted) throw new ForbiddenException('Cannot edit deleted message');
+    if (message.senderId !== userId)
+      throw new ForbiddenException('Not authorized');
+    if (message.isDeleted)
+      throw new ForbiddenException('Cannot edit deleted message');
 
     return this.prisma.message.update({
       where: { id: messageId },
@@ -154,12 +162,18 @@ export class MessagesService {
       where: { id: messageId },
     });
     if (!message) throw new NotFoundException('Message not found');
-    if (message.senderId !== userId) throw new ForbiddenException('Not authorized');
+    if (message.senderId !== userId)
+      throw new ForbiddenException('Not authorized');
 
     return this.prisma.message.update({
       where: { id: messageId },
       data: { isDeleted: true, deletedAt: new Date(), content: null },
-      select: { id: true, conversationId: true, isDeleted: true, deletedAt: true },
+      select: {
+        id: true,
+        conversationId: true,
+        isDeleted: true,
+        deletedAt: true,
+      },
     });
   }
 
@@ -195,7 +209,8 @@ export class MessagesService {
       where: { id: messageId },
     });
     if (!message) throw new NotFoundException('Message not found');
-    if (message.isDeleted) throw new ForbiddenException('Cannot react to deleted message');
+    if (message.isDeleted)
+      throw new ForbiddenException('Cannot react to deleted message');
 
     return this.prisma.reaction.upsert({
       where: { messageId_userId_emoji: { messageId, userId, emoji } },
@@ -222,7 +237,8 @@ export class MessagesService {
     const member = await this.prisma.conversationMember.findUnique({
       where: { conversationId_userId: { conversationId, userId } },
     });
-    if (!member) throw new ForbiddenException('Not a member of this conversation');
+    if (!member)
+      throw new ForbiddenException('Not a member of this conversation');
 
     const pagination = buildCursorPagination(cursor, limit);
 

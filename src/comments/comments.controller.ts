@@ -1,9 +1,23 @@
-import { Controller, Get, Post, Body, Param, Delete, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { ApiBearerAuth, ApiTags, ApiQuery, ApiOperation } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiQuery,
+  ApiOperation,
+} from '@nestjs/swagger';
 
 @ApiTags('Comments')
 @ApiBearerAuth()
@@ -18,7 +32,11 @@ export class CommentsController {
     @CurrentUser('id') userId: string,
     @Body() createCommentDto: CreateCommentDto,
   ) {
-    return this.commentsService.createComment(userId, createCommentDto.postId, createCommentDto);
+    return this.commentsService.createComment(
+      userId,
+      createCommentDto.postId,
+      createCommentDto,
+    );
   }
 
   @Get()
@@ -31,7 +49,11 @@ export class CommentsController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: number,
   ) {
-    return this.commentsService.getCommentsByPost(postId, cursor, limit ? Number(limit) : 20);
+    return this.commentsService.getCommentsByPost(
+      postId,
+      cursor,
+      limit ? Number(limit) : 20,
+    );
   }
 
   @Delete(':id')

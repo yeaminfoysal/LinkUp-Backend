@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { SearchUserDto } from './dto/search-user.dto';
@@ -24,6 +28,7 @@ const USER_SELECT = {
   lastSeen: true,
   createdAt: true,
   updatedAt: true,
+  role: true,
 };
 
 // Fields that affect the AI embedding — trigger regeneration when any changes
@@ -136,7 +141,11 @@ export class UsersService {
     return users;
   }
 
-  async getSuggestions(userId: string, limit: number, isGlobal: boolean = false) {
+  async getSuggestions(
+    userId: string,
+    limit: number,
+    isGlobal: boolean = false,
+  ) {
     // 1. Get blocked user IDs
     const blocks = await this.prisma.blockedUser.findMany({
       where: {
@@ -172,7 +181,12 @@ export class UsersService {
     );
 
     // 4. Combine all IDs to exclude
-    const excludeIds = [userId, ...blockedUserIds, ...friendIds, ...pendingUserIds];
+    const excludeIds = [
+      userId,
+      ...blockedUserIds,
+      ...friendIds,
+      ...pendingUserIds,
+    ];
 
     // 5. Fetch current user's profile details
     const currentUser = await this.prisma.user.findUnique({
@@ -193,23 +207,33 @@ export class UsersService {
     }
 
     const userSkills = currentUser.skills
-      ? currentUser.skills.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+      ? currentUser.skills
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean)
       : [];
     const userInterests = currentUser.interests
-      ? currentUser.interests.split(',').map((i) => i.trim().toLowerCase()).filter(Boolean)
+      ? currentUser.interests
+          .split(',')
+          .map((i) => i.trim().toLowerCase())
+          .filter(Boolean)
       : [];
 
     // 6. Build query filters based on commonalities (word-based matching)
     const OR_conditions: any[] = [];
-    
+
     const addWordConditions = (field: string, value: string | null) => {
       if (!value) return;
       const words = getFilteredWords(value);
       if (words.length === 0) {
-        OR_conditions.push({ [field]: { contains: value, mode: 'insensitive' } });
+        OR_conditions.push({
+          [field]: { contains: value, mode: 'insensitive' },
+        });
       } else {
         words.forEach((word) => {
-          OR_conditions.push({ [field]: { contains: word, mode: 'insensitive' } });
+          OR_conditions.push({
+            [field]: { contains: word, mode: 'insensitive' },
+          });
         });
       }
     };
@@ -225,7 +249,9 @@ export class UsersService {
     });
 
     userInterests.forEach((interest) => {
-      OR_conditions.push({ interests: { contains: interest, mode: 'insensitive' } });
+      OR_conditions.push({
+        interests: { contains: interest, mode: 'insensitive' },
+      });
     });
 
     const fallbackConditions = [
@@ -267,9 +293,16 @@ export class UsersService {
     const scoredCandidates = candidates.map((candidate) => {
       let score = 0;
       const matchingFields: string[] = [];
-      const matchingDetails: Array<{ field: string; value: string; label: string }> = [];
+      const matchingDetails: Array<{
+        field: string;
+        value: string;
+        label: string;
+      }> = [];
 
-      const uniMatch = checkFieldOverlap(currentUser.university, candidate.university);
+      const uniMatch = checkFieldOverlap(
+        currentUser.university,
+        candidate.university,
+      );
       if (uniMatch.matches) {
         score += 20;
         matchingFields.push('university');
@@ -280,7 +313,10 @@ export class UsersService {
         });
       }
 
-      const workMatch = checkFieldOverlap(currentUser.work_place, candidate.work_place);
+      const workMatch = checkFieldOverlap(
+        currentUser.work_place,
+        candidate.work_place,
+      );
       if (workMatch.matches) {
         score += 20;
         matchingFields.push('work_place');
@@ -291,7 +327,10 @@ export class UsersService {
         });
       }
 
-      const profMatch = checkFieldOverlap(currentUser.profession, candidate.profession);
+      const profMatch = checkFieldOverlap(
+        currentUser.profession,
+        candidate.profession,
+      );
       if (profMatch.matches) {
         score += 20;
         matchingFields.push('profession');
@@ -302,7 +341,10 @@ export class UsersService {
         });
       }
 
-      const locMatch = checkFieldOverlap(currentUser.location, candidate.location);
+      const locMatch = checkFieldOverlap(
+        currentUser.location,
+        candidate.location,
+      );
       if (locMatch.matches) {
         score += 15;
         matchingFields.push('location');
@@ -313,7 +355,10 @@ export class UsersService {
         });
       }
 
-      const deptMatch = checkFieldOverlap(currentUser.department, candidate.department);
+      const deptMatch = checkFieldOverlap(
+        currentUser.department,
+        candidate.department,
+      );
       if (deptMatch.matches) {
         score += 10;
         matchingFields.push('department');
@@ -325,8 +370,13 @@ export class UsersService {
       }
 
       if (candidate.skills) {
-        const candSkills = candidate.skills.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-        const commonSkills = userSkills.filter((skill) => candSkills.includes(skill));
+        const candSkills = candidate.skills
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean);
+        const commonSkills = userSkills.filter((skill) =>
+          candSkills.includes(skill),
+        );
         if (commonSkills.length > 0) {
           score += Math.min(15, commonSkills.length * 5);
           matchingFields.push('skills');
@@ -339,8 +389,13 @@ export class UsersService {
       }
 
       if (candidate.interests) {
-        const candInterests = candidate.interests.split(',').map((i) => i.trim().toLowerCase()).filter(Boolean);
-        const commonInterests = userInterests.filter((interest) => candInterests.includes(interest));
+        const candInterests = candidate.interests
+          .split(',')
+          .map((i) => i.trim().toLowerCase())
+          .filter(Boolean);
+        const commonInterests = userInterests.filter((interest) =>
+          candInterests.includes(interest),
+        );
         if (commonInterests.length > 0) {
           score += Math.min(10, commonInterests.length * 5);
           matchingFields.push('interests');
@@ -373,9 +428,11 @@ export class UsersService {
     // Filter out users who have 0 matching fields unless it's global mode
     let validCandidates = scoredCandidates;
     if (!isGlobal) {
-      validCandidates = scoredCandidates.filter((candidate) => candidate.matchScore > 0);
+      validCandidates = scoredCandidates.filter(
+        (candidate) => candidate.matchScore > 0,
+      );
     } else {
-      validCandidates = scoredCandidates.map(candidate => {
+      validCandidates = scoredCandidates.map((candidate) => {
         if (candidate.matchScore === 0) {
           return {
             ...candidate,
@@ -492,9 +549,37 @@ function buildMatchReason(
 
 function getFilteredWords(str: string): string[] {
   const STOP_WORDS = new Set([
-    'and', 'the', 'for', 'ltd', 'inc', 'co', 'corp', 'at', 'of', 'in', 'on', 'with', 'a', 'an',
-    'university', 'department', 'workplace', 'company', 'corporation', 'institute', 'school', 'college',
-    'tech', 'technology', 'science', 'engineering', 'solutions', 'software', 'systems', 'group', 'bangladesh'
+    'and',
+    'the',
+    'for',
+    'ltd',
+    'inc',
+    'co',
+    'corp',
+    'at',
+    'of',
+    'in',
+    'on',
+    'with',
+    'a',
+    'an',
+    'university',
+    'department',
+    'workplace',
+    'company',
+    'corporation',
+    'institute',
+    'school',
+    'college',
+    'tech',
+    'technology',
+    'science',
+    'engineering',
+    'solutions',
+    'software',
+    'systems',
+    'group',
+    'bangladesh',
   ]);
   return str
     .toLowerCase()
@@ -504,25 +589,26 @@ function getFilteredWords(str: string): string[] {
     .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
 }
 
-function checkFieldOverlap(val1?: string | null, val2?: string | null): { matches: boolean; matchedValue?: string } {
+function checkFieldOverlap(
+  val1?: string | null,
+  val2?: string | null,
+): { matches: boolean; matchedValue?: string } {
   if (!val1 || !val2) return { matches: false };
-  
+
   const v1 = val1.trim().toLowerCase();
   const v2 = val2.trim().toLowerCase();
-  
+
   if (v1 === v2 || v1.includes(v2) || v2.includes(v1)) {
     return { matches: true, matchedValue: val2 };
   }
-  
+
   const words1 = getFilteredWords(val1);
   const words2 = getFilteredWords(val2);
   const commonWords = words1.filter((w) => words2.includes(w));
-  
+
   if (commonWords.length > 0) {
     return { matches: true, matchedValue: val2 };
   }
-  
+
   return { matches: false };
 }
-
-

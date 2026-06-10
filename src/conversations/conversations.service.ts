@@ -61,7 +61,8 @@ export class ConversationsService {
         ],
       },
     });
-    if (block) throw new ForbiddenException('Cannot create conversation with this user');
+    if (block)
+      throw new ForbiddenException('Cannot create conversation with this user');
 
     // Check existing direct conversation
     const existing = await this.prisma.conversation.findFirst({
@@ -198,7 +199,8 @@ export class ConversationsService {
     const member = await this.prisma.conversationMember.findUnique({
       where: { conversationId_userId: { conversationId, userId } },
     });
-    if (!member) throw new ForbiddenException('Not a member of this conversation');
+    if (!member)
+      throw new ForbiddenException('Not a member of this conversation');
     return member;
   }
 
@@ -208,7 +210,11 @@ export class ConversationsService {
     return member;
   }
 
-  async addMembers(conversationId: string, userId: string, memberIds: string[]) {
+  async addMembers(
+    conversationId: string,
+    userId: string,
+    memberIds: string[],
+  ) {
     await this.ensureAdmin(conversationId, userId);
 
     const data = memberIds.map((mid) => ({
@@ -230,7 +236,11 @@ export class ConversationsService {
     return newMembers;
   }
 
-  async removeMember(conversationId: string, adminId: string, targetUserId: string) {
+  async removeMember(
+    conversationId: string,
+    adminId: string,
+    targetUserId: string,
+  ) {
     await this.ensureAdmin(conversationId, adminId);
 
     await this.prisma.conversationMember.deleteMany({
@@ -288,22 +298,34 @@ export class ConversationsService {
     });
   }
 
-  async promoteToAdmin(conversationId: string, adminId: string, targetUserId: string) {
+  async promoteToAdmin(
+    conversationId: string,
+    adminId: string,
+    targetUserId: string,
+  ) {
     await this.ensureAdmin(conversationId, adminId);
 
     await this.prisma.conversationMember.update({
-      where: { conversationId_userId: { conversationId, userId: targetUserId } },
+      where: {
+        conversationId_userId: { conversationId, userId: targetUserId },
+      },
       data: { role: 'ADMIN' },
     });
 
     return { promoted: targetUserId };
   }
 
-  async demoteAdmin(conversationId: string, adminId: string, targetUserId: string) {
+  async demoteAdmin(
+    conversationId: string,
+    adminId: string,
+    targetUserId: string,
+  ) {
     await this.ensureAdmin(conversationId, adminId);
 
     await this.prisma.conversationMember.update({
-      where: { conversationId_userId: { conversationId, userId: targetUserId } },
+      where: {
+        conversationId_userId: { conversationId, userId: targetUserId },
+      },
       data: { role: 'MEMBER' },
     });
 

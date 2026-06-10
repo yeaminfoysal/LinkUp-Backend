@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsArray, IsEnum, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsArray,
+  IsEnum,
+  MaxLength,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PostVisibility } from '../../common/enums/post-visibility.enum';
 

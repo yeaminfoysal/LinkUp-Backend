@@ -19,7 +19,9 @@ import { JwtService } from '@nestjs/jwt';
 @WebSocketGateway({ cors: { origin: '*' } })
 @UseGuards(WsJwtGuard)
 @UseFilters(WsExceptionFilter)
-export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class FriendsGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -29,7 +31,7 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     private readonly socketState: SocketStateService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
-  ) { }
+  ) {}
 
   async handleConnection(client: Socket) {
     try {
@@ -40,7 +42,7 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
         client.disconnect();
         return;
       }
-      
+
       const payload = this.jwtService.verify(token, {
         secret: process.env.JWT_ACCESS_SECRET,
       });
@@ -77,7 +79,10 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @MessageBody() data: { receiverId: string },
   ) {
     const senderId = client.data.userId as string;
-    const request = await this.friendsService.sendRequest(senderId, data.receiverId);
+    const request = await this.friendsService.sendRequest(
+      senderId,
+      data.receiverId,
+    );
 
     // Notify receiver in real-time
     this.server.to(`user:${data.receiverId}`).emit('friend_request_received', {
@@ -94,13 +99,18 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @MessageBody() data: { requestId: string },
   ) {
     const userId = client.data.userId as string;
-    const result = await this.friendsService.acceptRequest(data.requestId, userId);
+    const result = await this.friendsService.acceptRequest(
+      data.requestId,
+      userId,
+    );
 
     // Notify the original sender
-    this.server.to(`user:${result.request.senderId}`).emit('friend_request_accepted', {
-      requestId: result.request.id,
-      acceptedBy: result.sender,
-    });
+    this.server
+      .to(`user:${result.request.senderId}`)
+      .emit('friend_request_accepted', {
+        requestId: result.request.id,
+        acceptedBy: result.sender,
+      });
 
     return { event: 'friend_request_accepted', data: result };
   }
@@ -111,7 +121,10 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @MessageBody() data: { requestId: string },
   ) {
     const userId = client.data.userId as string;
-    const request = await this.friendsService.rejectRequest(data.requestId, userId);
+    const request = await this.friendsService.rejectRequest(
+      data.requestId,
+      userId,
+    );
 
     this.server.to(`user:${request.senderId}`).emit('friend_request_rejected', {
       requestId: request.id,
@@ -126,11 +139,16 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @MessageBody() data: { requestId: string },
   ) {
     const userId = client.data.userId as string;
-    const request = await this.friendsService.cancelRequest(data.requestId, userId);
+    const request = await this.friendsService.cancelRequest(
+      data.requestId,
+      userId,
+    );
 
-    this.server.to(`user:${request.receiverId}`).emit('friend_request_cancelled', {
-      requestId: request.id,
-    });
+    this.server
+      .to(`user:${request.receiverId}`)
+      .emit('friend_request_cancelled', {
+        requestId: request.id,
+      });
 
     return { event: 'friend_request_cancelled', data: request };
   }
@@ -141,9 +159,14 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @MessageBody() data: { friendshipId: string },
   ) {
     const userId = client.data.userId as string;
-    const result = await this.friendsService.removeFriend(data.friendshipId, userId);
+    const result = await this.friendsService.removeFriend(
+      data.friendshipId,
+      userId,
+    );
 
-    this.server.to(`user:${userId}`).emit('friend_removed', { friendshipId: data.friendshipId });
+    this.server
+      .to(`user:${userId}`)
+      .emit('friend_removed', { friendshipId: data.friendshipId });
 
     return { event: 'friend_removed', data: result };
   }
@@ -156,7 +179,9 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     const blockerId = client.data.userId as string;
     const block = await this.friendsService.blockUser(blockerId, data.userId);
 
-    this.server.to(`user:${data.userId}`).emit('user_blocked', { blockedBy: blockerId });
+    this.server
+      .to(`user:${data.userId}`)
+      .emit('user_blocked', { blockedBy: blockerId });
 
     return { event: 'user_blocked', data: block };
   }
@@ -167,9 +192,14 @@ export class FriendsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     @MessageBody() data: { userId: string },
   ) {
     const blockerId = client.data.userId as string;
-    const result = await this.friendsService.unblockUser(blockerId, data.userId);
+    const result = await this.friendsService.unblockUser(
+      blockerId,
+      data.userId,
+    );
 
-    this.server.to(`user:${data.userId}`).emit('user_unblocked', { unblockedBy: blockerId });
+    this.server
+      .to(`user:${data.userId}`)
+      .emit('user_unblocked', { unblockedBy: blockerId });
 
     return { event: 'user_unblocked', data: result };
   }

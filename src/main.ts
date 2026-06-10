@@ -18,7 +18,9 @@ async function bootstrap() {
   const allowedOrigins = frontendUrl.split(',').map((url) => url.trim());
   const origins = [
     ...allowedOrigins,
-    ...allowedOrigins.map((url) => (url.endsWith('/') ? url.slice(0, -1) : `${url}/`)),
+    ...allowedOrigins.map((url) =>
+      url.endsWith('/') ? url.slice(0, -1) : `${url}/`,
+    ),
   ];
 
   app.enableCors({

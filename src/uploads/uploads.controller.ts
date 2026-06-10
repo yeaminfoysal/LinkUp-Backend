@@ -7,7 +7,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
 import { UploadsService } from './uploads.service';
 
@@ -41,7 +47,8 @@ export class UploadsController {
 
   @Post('multiple')
   @UseInterceptors(
-    FilesInterceptor('files', 10, { // Allow max 10 files
+    FilesInterceptor('files', 10, {
+      // Allow max 10 files
       storage: memoryStorage(),
       limits: { fileSize: 50 * 1024 * 1024 }, // 50MB absolute max per file
     }),

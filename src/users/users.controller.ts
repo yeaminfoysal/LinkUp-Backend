@@ -1,6 +1,4 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable prettier/prettier */
 import { Body, Controller, Get, Param, Put, Query } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,7 +15,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 @ApiBearerAuth()
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) { }
+  constructor(private readonly usersService: UsersService) {}
 
   @Get('me')
   @ApiOperation({ summary: 'Get own profile' })
@@ -27,10 +25,7 @@ export class UsersController {
 
   @Put('me')
   @ApiOperation({ summary: 'Update own profile' })
-  updateMe(
-    @CurrentUser() user: { id: string },
-    @Body() dto: UpdateUserDto,
-  ) {
+  updateMe(@CurrentUser() user: { id: string }, @Body() dto: UpdateUserDto) {
     return this.usersService.updateProfile(user.id, dto);
   }
 

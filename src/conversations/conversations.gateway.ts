@@ -186,7 +186,10 @@ export class ConversationsGateway {
     @MessageBody() data: { conversationId: string },
   ) {
     const userId = client.data.userId as string;
-    await this.conversationsService.leaveConversation(data.conversationId, userId);
+    await this.conversationsService.leaveConversation(
+      data.conversationId,
+      userId,
+    );
 
     client.leave(`conversation:${data.conversationId}`);
     this.server
@@ -196,7 +199,10 @@ export class ConversationsGateway {
         userId,
       });
 
-    return { event: 'conversation_left', data: { conversationId: data.conversationId } };
+    return {
+      event: 'conversation_left',
+      data: { conversationId: data.conversationId },
+    };
   }
 
   @SubscribeMessage('delete_group')
@@ -211,6 +217,9 @@ export class ConversationsGateway {
       .to(`conversation:${data.conversationId}`)
       .emit('group_deleted', { conversationId: data.conversationId });
 
-    return { event: 'group_deleted', data: { conversationId: data.conversationId } };
+    return {
+      event: 'group_deleted',
+      data: { conversationId: data.conversationId },
+    };
   }
 }

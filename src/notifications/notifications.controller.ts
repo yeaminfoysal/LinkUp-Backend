@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Patch,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, Param, Patch, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -33,10 +27,7 @@ export class NotificationsController {
 
   @Patch(':id/read')
   @ApiOperation({ summary: 'Mark a notification as read' })
-  markAsRead(
-    @CurrentUser() user: { id: string },
-    @Param('id') id: string,
-  ) {
+  markAsRead(@CurrentUser() user: { id: string }, @Param('id') id: string) {
     return this.notificationsService.markAsRead(id, user.id);
   }
 }

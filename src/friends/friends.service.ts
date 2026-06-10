@@ -95,10 +95,12 @@ export class FriendsService {
 
     // Emit direct socket event
     if (this.friendsGateway.server) {
-      this.friendsGateway.server.to(`user:${receiverId}`).emit('friend_request_received', {
-        requestId: request.id,
-        sender: request.sender,
-      });
+      this.friendsGateway.server
+        .to(`user:${receiverId}`)
+        .emit('friend_request_received', {
+          requestId: request.id,
+          sender: request.sender,
+        });
     }
 
     return request;
@@ -111,8 +113,10 @@ export class FriendsService {
     });
 
     if (!request) throw new NotFoundException('Friend request not found');
-    if (request.receiverId !== userId) throw new ForbiddenException('Not authorized');
-    if (request.status !== 'PENDING') throw new BadRequestException('Request is not pending');
+    if (request.receiverId !== userId)
+      throw new ForbiddenException('Not authorized');
+    if (request.status !== 'PENDING')
+      throw new BadRequestException('Request is not pending');
 
     const [updatedRequest, friendship] = await this.prisma.$transaction([
       this.prisma.friendRequest.update({
@@ -135,10 +139,12 @@ export class FriendsService {
 
     // Emit direct socket event
     if (this.friendsGateway.server) {
-      this.friendsGateway.server.to(`user:${request.senderId}`).emit('friend_request_accepted', {
-        requestId: request.id,
-        acceptedBy: request.sender,
-      });
+      this.friendsGateway.server
+        .to(`user:${request.senderId}`)
+        .emit('friend_request_accepted', {
+          requestId: request.id,
+          acceptedBy: request.sender,
+        });
     }
 
     return { request: updatedRequest, friendship, sender: request.sender };
@@ -149,7 +155,8 @@ export class FriendsService {
       where: { id: requestId },
     });
     if (!request) throw new NotFoundException('Friend request not found');
-    if (request.receiverId !== userId) throw new ForbiddenException('Not authorized');
+    if (request.receiverId !== userId)
+      throw new ForbiddenException('Not authorized');
 
     const updated = await this.prisma.friendRequest.update({
       where: { id: requestId },
@@ -157,9 +164,11 @@ export class FriendsService {
     });
 
     if (this.friendsGateway.server) {
-      this.friendsGateway.server.to(`user:${request.senderId}`).emit('friend_request_rejected', {
-        requestId: request.id,
-      });
+      this.friendsGateway.server
+        .to(`user:${request.senderId}`)
+        .emit('friend_request_rejected', {
+          requestId: request.id,
+        });
     }
 
     return updated;
@@ -170,14 +179,19 @@ export class FriendsService {
       where: { id: requestId },
     });
     if (!request) throw new NotFoundException('Friend request not found');
-    if (request.senderId !== userId) throw new ForbiddenException('Not authorized');
+    if (request.senderId !== userId)
+      throw new ForbiddenException('Not authorized');
 
-    const deleted = await this.prisma.friendRequest.delete({ where: { id: requestId } });
+    const deleted = await this.prisma.friendRequest.delete({
+      where: { id: requestId },
+    });
 
     if (this.friendsGateway.server) {
-      this.friendsGateway.server.to(`user:${request.receiverId}`).emit('friend_request_cancelled', {
-        requestId: request.id,
-      });
+      this.friendsGateway.server
+        .to(`user:${request.receiverId}`)
+        .emit('friend_request_cancelled', {
+          requestId: request.id,
+        });
     }
 
     return deleted;
@@ -194,23 +208,36 @@ export class FriendsService {
 
     await this.prisma.friendship.delete({ where: { id: friendshipId } });
 
-    const otherUserId = friendship.user1Id === userId ? friendship.user2Id : friendship.user1Id;
+    const otherUserId =
+      friendship.user1Id === userId ? friendship.user2Id : friendship.user1Id;
     if (this.friendsGateway.server) {
-      this.friendsGateway.server.to(`user:${userId}`).emit('friend_removed', { friendshipId });
-      this.friendsGateway.server.to(`user:${otherUserId}`).emit('friend_removed', { friendshipId });
+      this.friendsGateway.server
+        .to(`user:${userId}`)
+        .emit('friend_removed', { friendshipId });
+      this.friendsGateway.server
+        .to(`user:${otherUserId}`)
+        .emit('friend_removed', { friendshipId });
     }
 
     return { message: 'Friend removed' };
   }
 
   async blockUser(blockerId: string, targetId: string) {
-    if (blockerId === targetId) throw new BadRequestException('Cannot block yourself');
+    if (blockerId === targetId)
+      throw new BadRequestException('Cannot block yourself');
 
-    const target = await this.prisma.user.findUnique({ where: { id: targetId } });
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+    });
     if (!target) throw new NotFoundException('User not found');
 
     const existing = await this.prisma.blockedUser.findUnique({
-      where: { blockedById_blockedUserId: { blockedById: blockerId, blockedUserId: targetId } },
+      where: {
+        blockedById_blockedUserId: {
+          blockedById: blockerId,
+          blockedUserId: targetId,
+        },
+      },
     });
     if (existing) throw new ConflictException('User already blocked');
 
@@ -239,7 +266,9 @@ export class FriendsService {
     });
 
     if (this.friendsGateway.server) {
-      this.friendsGateway.server.to(`user:${targetId}`).emit('user_blocked', { blockedBy: blockerId });
+      this.friendsGateway.server
+        .to(`user:${targetId}`)
+        .emit('user_blocked', { blockedBy: blockerId });
     }
 
     return blocked;
@@ -247,16 +276,28 @@ export class FriendsService {
 
   async unblockUser(blockerId: string, targetId: string) {
     const block = await this.prisma.blockedUser.findUnique({
-      where: { blockedById_blockedUserId: { blockedById: blockerId, blockedUserId: targetId } },
+      where: {
+        blockedById_blockedUserId: {
+          blockedById: blockerId,
+          blockedUserId: targetId,
+        },
+      },
     });
     if (!block) throw new NotFoundException('Block not found');
 
     const deleted = await this.prisma.blockedUser.delete({
-      where: { blockedById_blockedUserId: { blockedById: blockerId, blockedUserId: targetId } },
+      where: {
+        blockedById_blockedUserId: {
+          blockedById: blockerId,
+          blockedUserId: targetId,
+        },
+      },
     });
 
     if (this.friendsGateway.server) {
-      this.friendsGateway.server.to(`user:${targetId}`).emit('user_unblocked', { unblockedBy: blockerId });
+      this.friendsGateway.server
+        .to(`user:${targetId}`)
+        .emit('user_unblocked', { unblockedBy: blockerId });
     }
 
     return deleted;

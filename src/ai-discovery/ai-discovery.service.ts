@@ -40,7 +40,7 @@ export class AiDiscoveryService {
   constructor(
     private prisma: PrismaService,
     private embeddingService: EmbeddingService,
-  ) { }
+  ) {}
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Profile Text Builder
@@ -97,7 +97,8 @@ export class AiDiscoveryService {
     const profileText = this.buildProfileText(user);
     if (!profileText.trim()) return; // Nothing to embed
 
-    const embedding = await this.embeddingService.generateEmbedding(profileText);
+    const embedding =
+      await this.embeddingService.generateEmbedding(profileText);
     if (!embedding) return;
 
     // Prisma doesn't support vector type natively — use raw SQL
@@ -116,16 +117,11 @@ export class AiDiscoveryService {
   // Natural Language User Search
   // ─────────────────────────────────────────────────────────────────────────────
 
-
   async searchUsers(query: string, currentUserId: string) {
-
     // Step 1: Collect blocked user IDs (bidirectional)
     const blocked = await this.prisma.blockedUser.findMany({
       where: {
-        OR: [
-          { blockedById: currentUserId },
-          { blockedUserId: currentUserId },
-        ],
+        OR: [{ blockedById: currentUserId }, { blockedUserId: currentUserId }],
       },
       select: { blockedById: true, blockedUserId: true },
     });
@@ -185,16 +181,18 @@ export class AiDiscoveryService {
     };
 
     // Step 4: Map and filter high quality matches BEFORE hitting the Gemini API to save quota
-    const highQualityMatches = results.map(user => {
-      const rawScore = Number(user.match_score) || 0;
-      return {
-        ...user,
-        matchScore: calculateNormalizedScore(rawScore),
-      };
-    }).filter(user => user.matchScore >= 80);
+    const highQualityMatches = results
+      .map((user) => {
+        const rawScore = Number(user.match_score) || 0;
+        return {
+          ...user,
+          matchScore: calculateNormalizedScore(rawScore),
+        };
+      })
+      .filter((user) => user.matchScore >= 80);
 
     // Step 5: Generate match reasons in a single batched API call for the remaining matches
-    const usersDataForPrompt = highQualityMatches.map(u => ({
+    const usersDataForPrompt = highQualityMatches.map((u) => ({
       bio: u.bio,
       university: u.university,
       department: u.department,
@@ -202,10 +200,13 @@ export class AiDiscoveryService {
       interests: u.interests,
       profession: u.profession,
       work_place: u.work_place,
-      score: u.matchScore
+      score: u.matchScore,
     }));
 
-    const reasons = await this.generateMatchReasonsBatch(usersDataForPrompt, query);
+    const reasons = await this.generateMatchReasonsBatch(
+      usersDataForPrompt,
+      query,
+    );
 
     const enriched = highQualityMatches.map((user, index) => {
       return {
@@ -227,8 +228,6 @@ export class AiDiscoveryService {
         matchReason: reasons[index] || 'Matches your search criteria',
       };
     });
-
-
 
     return enriched;
   }
@@ -253,9 +252,13 @@ export class AiDiscoveryService {
     if (users.length === 0) return [];
 
     try {
-      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const model = this.genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash-lite',
+      });
 
-      const userListStr = users.map((u, i) => `User ${i + 1}:
+      const userListStr = users
+        .map(
+          (u, i) => `User ${i + 1}:
 Bio: "${u.bio ?? ''}"
 University: "${u.university ?? ''}"
 Department: "${u.department ?? ''}"
@@ -263,7 +266,9 @@ Skills: "${u.skills ?? ''}"
 Interests: "${u.interests ?? ''}"
 Profession: "${u.profession ?? ''}"
 Work Place: "${u.work_place ?? ''}"
-Score: ${u.score}%`).join('\n\n');
+Score: ${u.score}%`,
+        )
+        .join('\n\n');
 
       const prompt = `
 Search query: "${query}"
@@ -282,7 +287,11 @@ Example: ["NestJS developer with strong AI interest in Dhaka", "BUET grad workin
       const responseText = result.response.text().trim();
 
       // Clean up potential markdown formatting if model ignores instruction
-      const cleanedJson = responseText.replace(/^```json/i, '').replace(/^```/, '').replace(/```$/i, '').trim();
+      const cleanedJson = responseText
+        .replace(/^```json/i, '')
+        .replace(/^```/, '')
+        .replace(/```$/i, '')
+        .trim();
 
       const reasons = JSON.parse(cleanedJson);
 
@@ -293,9 +302,14 @@ Example: ["NestJS developer with strong AI interest in Dhaka", "BUET grad workin
       }
     } catch (error: any) {
       if (error?.status === 429) {
-        console.warn('⚠️ Gemini API rate limit exceeded. Falling back to default match reasons.');
+        console.warn(
+          '⚠️ Gemini API rate limit exceeded. Falling back to default match reasons.',
+        );
       } else {
-        console.error('⚠️ Batch match reason generation failed:', error?.message || error);
+        console.error(
+          '⚠️ Batch match reason generation failed:',
+          error?.message || error,
+        );
       }
       return users.map(() => 'Matches your search criteria');
     }
