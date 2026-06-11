@@ -8,13 +8,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import * as nodemailer from 'nodemailer';
-import * as dns from 'dns';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiDiscoveryService } from '../ai-discovery/ai-discovery.service';
-
-// Force Node.js to prefer IPv4 over IPv6. This fixes the 'ENETUNREACH' error on Render and other cloud providers.
-dns.setDefaultResultOrder('ipv4first');
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -147,40 +142,10 @@ export class AuthService {
 
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/reset-password?token=${resetToken}`;
 
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587', 10),
-      secure: false, // true for 465, false for other ports like 587
-      auth: {
-        user: process.env.SMTP_USER?.trim(),
-        pass: process.env.SMTP_PASS?.trim(),
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
-
-    const mailOptions = {
-      from: `"LinkUp Support" <${process.env.SMTP_USER}>`,
-      to: user.email,
-      subject: 'Password Reset Request',
-      text: `You requested a password reset. Please click on the following link to reset your password: \n\n ${resetUrl} \n\n If you did not request this, please ignore this email.`,
-      html: `
-        <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto;">
-          <h2>Password Reset Request</h2>
-          <p>You requested a password reset. Please click the button below to set a new password:</p>
-          <a href="${resetUrl}" style="display: inline-block; padding: 10px 20px; background-color: #8b5cf6; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">Reset Password</a>
-          <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not request this, you can safely ignore this email.</p>
-        </div>
-      `,
-    };
-
-    try {
-      await transporter.sendMail(mailOptions);
-    } catch (error) {
+    // Fire-and-forget: don't block the response waiting for email delivery
+    this.sendResetEmail(user.email, resetUrl).catch((error) => {
       console.error('Error sending reset email:', error);
-      // Optional: Handle error gracefully, or throw it.
-    }
+    });
 
     return { message: 'If that email exists, a reset link has been sent.' };
   }
@@ -214,6 +179,33 @@ export class AuthService {
     await this.prisma.refreshToken.deleteMany({ where: { userId: user.id } });
 
     return { message: 'Password has been successfully reset.' };
+  }
+
+  private async sendResetEmail(to: string, resetUrl: string) {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': process.env.BREVO_API_KEY ?? '',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { name: 'LinkUp Support', email: process.env.EMAIL_FROM },
+        to: [{ email: to }],
+        subject: 'Password Reset Request',
+        htmlContent: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Password Reset Request</h2>
+            <p>You requested a password reset. Please click the button below to set a new password:</p>
+            <a href="${resetUrl}" style="display: inline-block; padding: 10px 20px; background-color: #8b5cf6; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;">Reset Password</a>
+            <p style="margin-top: 20px; color: #666; font-size: 14px;">If you did not request this, you can safely ignore this email.</p>
+          </div>
+        `,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Brevo API error ${response.status}: ${await response.text()}`);
+    }
   }
 
   private async generateTokens(payload: JwtPayload) {
