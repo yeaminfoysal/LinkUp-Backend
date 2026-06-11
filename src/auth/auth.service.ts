@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+ 
 import {
   // BadRequestException,
   ConflictException,
@@ -11,6 +11,7 @@ import * as crypto from 'crypto';
 import * as nodemailer from 'nodemailer';
 import * as dns from 'dns';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiDiscoveryService } from '../ai-discovery/ai-discovery.service';
 
 // Force Node.js to prefer IPv4 over IPv6. This fixes the 'ENETUNREACH' error on Render and other cloud providers.
 dns.setDefaultResultOrder('ipv4first');
@@ -24,6 +25,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private aiDiscoveryService: AiDiscoveryService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -61,6 +63,10 @@ export class AuthService {
         role: true,
       },
     });
+
+    // Generate profile embedding in background so the new user is
+    // discoverable in AI search right away (don't block registration)
+    this.aiDiscoveryService.updateUserEmbedding(user.id).catch(console.error);
 
     const tokens = await this.generateTokens({
       sub: user.id,

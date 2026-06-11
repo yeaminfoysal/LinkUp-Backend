@@ -13,7 +13,7 @@ export class SearchUserDto {
   @ApiProperty({ example: 'john' })
   @IsString()
   @MinLength(1)
-  query: string;
+  query: string | undefined;
 
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()

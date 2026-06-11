@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-import { Body, Controller, Param, Patch, Post } from '@nestjs/common';
+ 
+ 
+import { Body, Controller, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -12,6 +12,8 @@ import { Throttle } from '@nestjs/throttler';
 import { AiDiscoveryService } from './ai-discovery.service';
 import { SearchUsersDto } from './dto/search-users.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { HttpRolesGuard } from '../common/guards/http-roles.guard';
+import { HttpRoles } from '../common/decorators/http-roles.decorator';
 
 @ApiTags('AI Discovery')
 @ApiBearerAuth()
@@ -28,7 +30,7 @@ export class AiDiscoveryController {
   @ApiOperation({
     summary: 'Search users with natural language (AI-powered)',
     description:
-      'Convert a natural language query into an embedding vector and find users via cosine similarity. Returns ranked results with match scores and AI-generated match reasons.',
+      'Hybrid search: converts the query into an embedding vector for semantic matching (pgvector cosine similarity) and also matches exact names/usernames. Returns ranked results with match scores, AI-generated match reasons, and friendship status.',
   })
   @ApiResponse({
     status: 200,
@@ -47,18 +49,49 @@ export class AiDiscoveryController {
 
   /**
    * PATCH /ai/update-embedding/:userId
-   * Manually trigger embedding regeneration — max 5 per hour
+   * Manually trigger embedding regeneration — admin only, max 5 per hour
    */
   @Patch('update-embedding/:userId')
+  @UseGuards(HttpRolesGuard)
+  @HttpRoles('SUPER_ADMIN')
   @Throttle({ default: { limit: 5, ttl: 3600000 } })
   @ApiOperation({
-    summary: 'Manually trigger profile embedding regeneration',
+    summary: 'Manually trigger profile embedding regeneration (admin)',
     description:
       'Force regenerate the AI embedding for a user profile. Useful for admin tools or background jobs.',
   })
   @ApiResponse({ status: 200, description: 'Embedding updated successfully' })
   async updateEmbedding(@Param('userId') userId: string) {
-    await this.aiDiscoveryService.updateUserEmbedding(userId);
-    return { message: 'Embedding updated successfully', userId };
+    const updated = await this.aiDiscoveryService.updateUserEmbedding(userId);
+    return {
+      message: updated
+        ? 'Embedding updated successfully'
+        : 'Embedding skipped (user not found, empty profile, or AI unavailable)',
+      updated,
+      userId,
+    };
+  }
+
+  /**
+   * POST /ai/reindex-embeddings
+   * Regenerate ALL user embeddings — admin only, max 2 per hour.
+   * Required once after changing the embedding model or taskType,
+   * since old and new vectors are not comparable.
+   */
+  @Post('reindex-embeddings')
+  @UseGuards(HttpRolesGuard)
+  @HttpRoles('SUPER_ADMIN')
+  @Throttle({ default: { limit: 2, ttl: 3600000 } })
+  @ApiOperation({
+    summary: 'Regenerate embeddings for all users (admin)',
+    description:
+      'Sequentially regenerates every user profile embedding. Run once after an embedding model/taskType change. May take a while for large user bases.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Reindex summary: { total, updated, skipped, failed }',
+  })
+  async reindexEmbeddings() {
+    return this.aiDiscoveryService.regenerateAllEmbeddings();
   }
 }
