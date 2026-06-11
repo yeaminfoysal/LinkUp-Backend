@@ -413,7 +413,29 @@ export class UsersService {
     }
     const effectiveCeil = Math.max(EMBEDDING_SIM_CEIL, effectiveFloor + 0.08);
 
-    // 6. Score, map matches, and sort
+    // 6a. Semantic profession matching — one Gemini batch call for candidates
+    // whose profession didn't word-match. Skipped in global mode (no
+    // profession context) and when the user has no profession set.
+    const semanticProfessionMatches = new Set<string>();
+    if (currentUser.profession && !isGlobal) {
+      const needsSemanticCheck = candidates.filter(
+        (c) =>
+          c.profession &&
+          !checkFieldOverlap(currentUser.profession, c.profession, true)
+            .matches,
+      );
+      if (needsSemanticCheck.length > 0) {
+        const results = await this.aiDiscoveryService.checkProfessionMatchBatch(
+          currentUser.profession,
+          needsSemanticCheck.map((c) => c.profession!),
+        );
+        needsSemanticCheck.forEach((c, i) => {
+          if (results[i]) semanticProfessionMatches.add(c.id);
+        });
+      }
+    }
+
+    // 6b. Score, map matches, and sort
     const scoredCandidates = candidates.map((candidate) => {
       let rawScore = 0;
       const matchingFields: string[] = [];
@@ -471,7 +493,9 @@ export class UsersService {
         candidate.profession,
         true,
       );
-      if (profMatch.matches) {
+      const semanticProfMatch =
+        !profMatch.matches && semanticProfessionMatches.has(candidate.id);
+      if (profMatch.matches || semanticProfMatch) {
         rawScore += SUGGESTION_WEIGHTS.profession;
         matchingFields.push('profession');
         matchingDetails.push({
@@ -554,16 +578,12 @@ export class UsersService {
         );
         rawScore += Math.round(simFraction * SUGGESTION_WEIGHTS.maxEmbedding);
       }
-      // "Similar Profile" badge only when the similarity clearly stands out
-      // from the pool — weak similarity may rank but never labels
+      // "Similar Profile" boost: adds to score and enables the reason sentence,
+      // but does NOT emit a matchingDetails badge — showing a raw similarity %
+      // next to the matchScore percentage creates conflicting numbers for users.
       const strongSimilarity = simFraction >= 0.5;
       if (strongSimilarity) {
         matchingFields.push('profile_similarity');
-        matchingDetails.push({
-          field: 'profile_similarity',
-          value: `${Math.round(sim * 100)}%`,
-          label: 'Similar Profile',
-        });
       }
 
       // Honest display score: percentage of a realistic "full match",
@@ -699,18 +719,25 @@ function buildFieldReason(
   const skills = matchingDetails.find((d) => d.field === 'skills');
   const ints = matchingDetails.find((d) => d.field === 'interests');
 
+  const profExact = prof?.label === 'Same Profession';
+  const profDesc = profExact ? `work as ${prof!.value}` : 'work in similar roles';
+
   if (uni && prof) {
-    return `You both study/studied at ${uni.value} and work as a ${prof.value}.`;
+    return profExact
+      ? `You both study/studied at ${uni.value} and work as a ${prof.value}.`
+      : `You both study/studied at ${uni.value} and work in similar roles.`;
   }
   if (work && prof) {
-    return `Both of you work as ${prof.value} at ${work.value}.`;
+    return profExact
+      ? `Both of you work as ${prof.value} at ${work.value}.`
+      : `You both work in similar roles at ${work.value}.`;
   }
   if (uni && loc) {
     return `You both study/studied at ${uni.value} and live in ${loc.value}.`;
   }
 
   const parts: string[] = [];
-  if (prof) parts.push(`work as ${prof.value}`);
+  if (prof) parts.push(profDesc);
   if (work && !prof) parts.push(`work at ${work.value}`);
   if (uni) parts.push(`studied at ${uni.value}`);
   if (loc) parts.push(`live in ${loc.value}`);

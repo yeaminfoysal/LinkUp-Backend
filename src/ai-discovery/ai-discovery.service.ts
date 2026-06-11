@@ -531,4 +531,66 @@ Example: [{"reason": "NestJS developer with strong AI interest in Dhaka", "isRel
       return null;
     }
   }
+
+  /**
+   * Batch-checks whether a list of candidate professions describe the same or a
+   * closely related role as `myProfession`. Returns a boolean[] in the same
+   * order. Falls back to all-false on any API error so callers degrade
+   * gracefully without crashing.
+   */
+  async checkProfessionMatchBatch(
+    myProfession: string,
+    candidateProfessions: string[],
+  ): Promise<boolean[]> {
+    if (candidateProfessions.length === 0) return [];
+
+    try {
+      const model = this.genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash-lite',
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: SchemaType.ARRAY,
+            items: { type: SchemaType.BOOLEAN },
+          },
+        },
+      });
+
+      const prompt = `You are a professional role similarity expert for a social networking platform.
+
+My profession: "${myProfession}"
+
+For each candidate profession below, return true if it describes the SAME role or a closely related role (overlapping skills, same domain), or false if it is a clearly different role.
+
+Return true examples:
+- "Software Engineer" ≈ "Software Developer" ≈ "Web Developer" ≈ "Full Stack Developer" ≈ "Website Developer"
+- "Frontend Developer" ≈ "React Developer" ≈ "UI Developer"
+- "Backend Developer" ≈ "Node.js Developer" ≈ "API Developer"
+- "Data Scientist" ≈ "ML Engineer" ≈ "AI Engineer"
+
+Return false examples:
+- "Software Engineer" vs "Product Manager"
+- "Web Developer" vs "Graphic Designer"
+- "Data Scientist" vs "Database Administrator"
+
+Candidate professions (one per line, numbered):
+${candidateProfessions.map((p, i) => `${i + 1}. "${p}"`).join('\n')}
+
+Return a JSON array of booleans in the exact same order. Example: [true, false, true]`;
+
+      const result = await model.generateContent(prompt);
+      const parsed = JSON.parse(result.response.text()) as unknown;
+
+      if (
+        !Array.isArray(parsed) ||
+        parsed.length !== candidateProfessions.length
+      ) {
+        return candidateProfessions.map(() => false);
+      }
+
+      return (parsed as unknown[]).map((v) => v === true);
+    } catch {
+      return candidateProfessions.map(() => false);
+    }
+  }
 }
