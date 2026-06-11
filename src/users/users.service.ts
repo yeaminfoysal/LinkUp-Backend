@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+ 
 import {
   Injectable,
   NotFoundException,
@@ -43,6 +43,43 @@ const EMBEDDING_FIELDS = [
   'profession',
   'work_place',
 ] as const;
+
+// ─── Smart Matches scoring ────────────────────────────────────────────────────
+// Raw points per signal. Mutual friends carry the most total weight — in a
+// social network they're a stronger signal than any single profile field.
+const SUGGESTION_WEIGHTS = {
+  university: 15,
+  work_place: 15,
+  profession: 12,
+  location: 10,
+  department: 6,
+  perSkill: 4,
+  maxSkills: 12,
+  perInterest: 3,
+  maxInterests: 9,
+  perMutualFriend: 6,
+  maxMutualFriends: 24,
+  maxEmbedding: 20,
+};
+// Profile↔profile cosine similarity below the floor earns nothing; at/above
+// the ceiling it earns maxEmbedding points (linear in between). Profiles all
+// share the same template/language, so unrelated pairs already sit high —
+// hence the high static floor.
+const EMBEDDING_SIM_FLOOR = 0.78;
+const EMBEDDING_SIM_CEIL = 0.92;
+// The baseline shifts with the embedding model, so the floor is also
+// calibrated against the candidate pool's own median: only candidates
+// meaningfully above "how similar everyone is to me anyway" earn points
+const EMBEDDING_BASELINE_MARGIN = 0.03;
+const MIN_SIMS_FOR_BASELINE = 5;
+// Raw points that display as ~100% match. Honest reference for a very strong
+// match (e.g. same university + profession + location + shared skills) —
+// no flat "+50" inflation.
+const FULL_MATCH_POINTS = 60;
+// How many embedding-nearest users to pull into the candidate pool, so
+// semantically similar people surface even with zero literal word overlap
+const VECTOR_CANDIDATE_LIMIT = 30;
+const CANDIDATE_POOL_LIMIT = 100;
 
 @Injectable()
 export class UsersService {
@@ -146,85 +183,124 @@ export class UsersService {
     limit: number,
     isGlobal: boolean = false,
   ) {
-    // 1. Get blocked user IDs
-    const blocks = await this.prisma.blockedUser.findMany({
-      where: {
-        OR: [{ blockedById: userId }, { blockedUserId: userId }],
-      },
-      select: { blockedById: true, blockedUserId: true },
-    });
+    // 1. Exclusion sources + own profile, in parallel
+    const [blocks, friendships, pendingRequests, currentUser] =
+      await Promise.all([
+        this.prisma.blockedUser.findMany({
+          where: {
+            OR: [{ blockedById: userId }, { blockedUserId: userId }],
+          },
+          select: { blockedById: true, blockedUserId: true },
+        }),
+        this.prisma.friendship.findMany({
+          where: {
+            OR: [{ user1Id: userId }, { user2Id: userId }],
+          },
+          select: { user1Id: true, user2Id: true },
+        }),
+        this.prisma.friendRequest.findMany({
+          where: {
+            OR: [{ senderId: userId }, { receiverId: userId }],
+            status: 'PENDING',
+          },
+          select: { senderId: true, receiverId: true },
+        }),
+        this.prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            location: true,
+            university: true,
+            department: true,
+            skills: true,
+            interests: true,
+            profession: true,
+            work_place: true,
+          },
+        }),
+      ]);
+
+    if (!currentUser) {
+      throw new NotFoundException('User not found');
+    }
+
     const blockedUserIds = blocks.map((b) =>
       b.blockedById === userId ? b.blockedUserId : b.blockedById,
     );
-
-    // 2. Get friend IDs
-    const friendships = await this.prisma.friendship.findMany({
-      where: {
-        OR: [{ user1Id: userId }, { user2Id: userId }],
-      },
-      select: { user1Id: true, user2Id: true },
-    });
     const friendIds = friendships.map((f) =>
       f.user1Id === userId ? f.user2Id : f.user1Id,
     );
-
-    // 3. Get pending requests user IDs
-    const pendingRequests = await this.prisma.friendRequest.findMany({
-      where: {
-        OR: [{ senderId: userId }, { receiverId: userId }],
-        status: 'PENDING',
-      },
-      select: { senderId: true, receiverId: true },
-    });
     const pendingUserIds = pendingRequests.map((r) =>
       r.senderId === userId ? r.receiverId : r.senderId,
     );
 
-    // 4. Combine all IDs to exclude
     const excludeIds = [
       userId,
       ...blockedUserIds,
       ...friendIds,
       ...pendingUserIds,
     ];
+    const excludeSet = new Set(excludeIds);
+    const friendIdSet = new Set(friendIds);
 
-    // 5. Fetch current user's profile details
-    const currentUser = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        location: true,
-        university: true,
-        department: true,
-        skills: true,
-        interests: true,
-        profession: true,
-        work_place: true,
-      },
-    });
+    const userSkills = splitTokens(currentUser.skills);
+    const userInterests = splitTokens(currentUser.interests);
+    const userSkillNorms = new Set(userSkills.map(normalizeToken));
+    const userInterestNorms = new Set(userInterests.map(normalizeToken));
 
-    if (!currentUser) {
-      throw new NotFoundException('User not found');
+    // 2. Mutual friend counts (friends-of-friends) + embedding-nearest users,
+    // in parallel. Mutual friends are the strongest "people you may know"
+    // signal; the vector candidates surface semantically similar profiles
+    // even when no literal word overlaps.
+    const [mutualRows, vectorRows] = await Promise.all([
+      friendIds.length > 0
+        ? this.prisma.friendship.findMany({
+            where: {
+              OR: [
+                { user1Id: { in: friendIds } },
+                { user2Id: { in: friendIds } },
+              ],
+            },
+            select: { user1Id: true, user2Id: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT c.id
+        FROM "User" c, "User" me
+        WHERE me.id = ${userId}
+          AND me."profileEmbedding" IS NOT NULL
+          AND c."profileEmbedding" IS NOT NULL
+          AND c.id != ALL(${excludeIds}::text[])
+        ORDER BY c."profileEmbedding" <=> me."profileEmbedding"
+        LIMIT ${VECTOR_CANDIDATE_LIMIT}
+      `,
+    ]);
+
+    const mutualCounts = new Map<string, number>();
+    for (const f of mutualRows) {
+      // Each row links one of my friends to a potential candidate; rows
+      // between two of my own friends are skipped via the exclude set
+      const pairs = [
+        [f.user1Id, f.user2Id],
+        [f.user2Id, f.user1Id],
+      ] as const;
+      for (const [friend, candidate] of pairs) {
+        if (friendIdSet.has(friend) && !excludeSet.has(candidate)) {
+          mutualCounts.set(candidate, (mutualCounts.get(candidate) ?? 0) + 1);
+        }
+      }
     }
+    const vectorCandidateIds = vectorRows.map((r) => r.id);
 
-    const userSkills = currentUser.skills
-      ? currentUser.skills
-          .split(',')
-          .map((s) => s.trim().toLowerCase())
-          .filter(Boolean)
-      : [];
-    const userInterests = currentUser.interests
-      ? currentUser.interests
-          .split(',')
-          .map((i) => i.trim().toLowerCase())
-          .filter(Boolean)
-      : [];
-
-    // 6. Build query filters based on commonalities (word-based matching)
+    // 3. Build query filters based on commonalities (word-based matching)
     const OR_conditions: any[] = [];
 
-    const addWordConditions = (field: string, value: string | null) => {
+    const addWordConditions = (
+      field: string,
+      value: string | null,
+      stopWords?: Set<string>,
+    ) => {
       if (!value) return;
-      const words = getFilteredWords(value);
+      const words = getFilteredWords(value, stopWords);
       if (words.length === 0) {
         OR_conditions.push({
           [field]: { contains: value, mode: 'insensitive' },
@@ -240,8 +316,10 @@ export class UsersService {
 
     addWordConditions('location', currentUser.location);
     addWordConditions('university', currentUser.university);
-    addWordConditions('department', currentUser.department);
-    addWordConditions('profession', currentUser.profession);
+    // Profession/department keep domain words ("software", "engineering") —
+    // they're the meaning there, not filler
+    addWordConditions('department', currentUser.department, MINIMAL_STOP_WORDS);
+    addWordConditions('profession', currentUser.profession, MINIMAL_STOP_WORDS);
     addWordConditions('work_place', currentUser.work_place);
 
     userSkills.forEach((skill) => {
@@ -254,13 +332,23 @@ export class UsersService {
       });
     });
 
+    // Candidates with mutual friends or high embedding similarity belong in
+    // the pool even when no profile word overlaps
+    if (mutualCounts.size > 0) {
+      OR_conditions.push({ id: { in: [...mutualCounts.keys()] } });
+    }
+    if (vectorCandidateIds.length > 0) {
+      OR_conditions.push({ id: { in: vectorCandidateIds } });
+    }
+
     const fallbackConditions = [
       { location: { not: null } },
       { university: { not: null } },
       { profession: { not: null } },
     ];
 
-    // 7. Query candidate suggestions
+    // 4. Query candidate suggestions — prefer recently active users so the
+    // arbitrary pool cap doesn't crowd out live accounts
     const candidates = await this.prisma.user.findMany({
       where: {
         id: { notIn: excludeIds },
@@ -286,12 +374,48 @@ export class UsersService {
         isOnline: true,
         lastSeen: true,
       },
-      take: 100,
+      orderBy: { lastSeen: { sort: 'desc', nulls: 'last' } },
+      take: CANDIDATE_POOL_LIMIT,
     });
 
-    // 8. Score, map matches, and sort
+    // 5. Profile↔profile embedding similarity for the whole pool (one query)
+    const simById = new Map<string, number>();
+    if (candidates.length > 0) {
+      const simRows = await this.prisma.$queryRaw<
+        Array<{ id: string; sim: number }>
+      >`
+        SELECT
+          c.id,
+          1 - (c."profileEmbedding" <=> me."profileEmbedding") AS sim
+        FROM "User" c, "User" me
+        WHERE me.id = ${userId}
+          AND me."profileEmbedding" IS NOT NULL
+          AND c."profileEmbedding" IS NOT NULL
+          AND c.id = ANY(${candidates.map((c) => c.id)}::text[])
+      `;
+      for (const row of simRows) {
+        simById.set(row.id, Number(row.sim) || 0);
+      }
+    }
+
+    // Calibrate the similarity floor against the pool's own median: any two
+    // profiles share template/language so the absolute baseline is high and
+    // model-dependent — only candidates meaningfully above "how similar
+    // everyone is to me anyway" should earn points
+    let effectiveFloor = EMBEDDING_SIM_FLOOR;
+    const simValues = [...simById.values()].sort((a, b) => a - b);
+    if (simValues.length >= MIN_SIMS_FOR_BASELINE) {
+      const median = simValues[Math.floor(simValues.length / 2)];
+      effectiveFloor = Math.max(
+        effectiveFloor,
+        median + EMBEDDING_BASELINE_MARGIN,
+      );
+    }
+    const effectiveCeil = Math.max(EMBEDDING_SIM_CEIL, effectiveFloor + 0.08);
+
+    // 6. Score, map matches, and sort
     const scoredCandidates = candidates.map((candidate) => {
-      let score = 0;
+      let rawScore = 0;
       const matchingFields: string[] = [];
       const matchingDetails: Array<{
         field: string;
@@ -299,12 +423,27 @@ export class UsersService {
         label: string;
       }> = [];
 
+      // Mutual friends — strongest signal, shown first
+      const mutualCount = mutualCounts.get(candidate.id) ?? 0;
+      if (mutualCount > 0) {
+        rawScore += Math.min(
+          SUGGESTION_WEIGHTS.maxMutualFriends,
+          mutualCount * SUGGESTION_WEIGHTS.perMutualFriend,
+        );
+        matchingFields.push('mutual_friends');
+        matchingDetails.push({
+          field: 'mutual_friends',
+          value: String(mutualCount),
+          label: 'Mutual Friends',
+        });
+      }
+
       const uniMatch = checkFieldOverlap(
         currentUser.university,
         candidate.university,
       );
       if (uniMatch.matches) {
-        score += 20;
+        rawScore += SUGGESTION_WEIGHTS.university;
         matchingFields.push('university');
         matchingDetails.push({
           field: 'university',
@@ -318,7 +457,7 @@ export class UsersService {
         candidate.work_place,
       );
       if (workMatch.matches) {
-        score += 20;
+        rawScore += SUGGESTION_WEIGHTS.work_place;
         matchingFields.push('work_place');
         matchingDetails.push({
           field: 'work_place',
@@ -330,14 +469,15 @@ export class UsersService {
       const profMatch = checkFieldOverlap(
         currentUser.profession,
         candidate.profession,
+        true,
       );
       if (profMatch.matches) {
-        score += 20;
+        rawScore += SUGGESTION_WEIGHTS.profession;
         matchingFields.push('profession');
         matchingDetails.push({
           field: 'profession',
           value: candidate.profession!,
-          label: 'Same Profession',
+          label: profMatch.exact ? 'Same Profession' : 'Similar Profession',
         });
       }
 
@@ -346,7 +486,7 @@ export class UsersService {
         candidate.location,
       );
       if (locMatch.matches) {
-        score += 15;
+        rawScore += SUGGESTION_WEIGHTS.location;
         matchingFields.push('location');
         matchingDetails.push({
           field: 'location',
@@ -358,82 +498,108 @@ export class UsersService {
       const deptMatch = checkFieldOverlap(
         currentUser.department,
         candidate.department,
+        true,
       );
       if (deptMatch.matches) {
-        score += 10;
+        rawScore += SUGGESTION_WEIGHTS.department;
         matchingFields.push('department');
         matchingDetails.push({
           field: 'department',
           value: candidate.department!,
-          label: 'Same Department',
+          label: deptMatch.exact ? 'Same Department' : 'Similar Department',
         });
       }
 
-      if (candidate.skills) {
-        const candSkills = candidate.skills
-          .split(',')
-          .map((s) => s.trim().toLowerCase())
-          .filter(Boolean);
-        const commonSkills = userSkills.filter((skill) =>
-          candSkills.includes(skill),
+      // Skills/interests — compare normalized tokens ("Node.js" ≈ "nodejs")
+      // but display the candidate's original wording
+      const commonSkills = splitTokens(candidate.skills).filter((skill) =>
+        userSkillNorms.has(normalizeToken(skill)),
+      );
+      if (commonSkills.length > 0) {
+        rawScore += Math.min(
+          SUGGESTION_WEIGHTS.maxSkills,
+          commonSkills.length * SUGGESTION_WEIGHTS.perSkill,
         );
-        if (commonSkills.length > 0) {
-          score += Math.min(15, commonSkills.length * 5);
-          matchingFields.push('skills');
-          matchingDetails.push({
-            field: 'skills',
-            value: commonSkills.join(', '),
-            label: `Shared Skills`,
-          });
-        }
+        matchingFields.push('skills');
+        matchingDetails.push({
+          field: 'skills',
+          value: commonSkills.join(', '),
+          label: `Shared Skills`,
+        });
       }
 
-      if (candidate.interests) {
-        const candInterests = candidate.interests
-          .split(',')
-          .map((i) => i.trim().toLowerCase())
-          .filter(Boolean);
-        const commonInterests = userInterests.filter((interest) =>
-          candInterests.includes(interest),
+      const commonInterests = splitTokens(candidate.interests).filter(
+        (interest) => userInterestNorms.has(normalizeToken(interest)),
+      );
+      if (commonInterests.length > 0) {
+        rawScore += Math.min(
+          SUGGESTION_WEIGHTS.maxInterests,
+          commonInterests.length * SUGGESTION_WEIGHTS.perInterest,
         );
-        if (commonInterests.length > 0) {
-          score += Math.min(10, commonInterests.length * 5);
-          matchingFields.push('interests');
-          matchingDetails.push({
-            field: 'interests',
-            value: commonInterests.join(', '),
-            label: `Shared Interests`,
-          });
-        }
+        matchingFields.push('interests');
+        matchingDetails.push({
+          field: 'interests',
+          value: commonInterests.join(', '),
+          label: `Shared Interests`,
+        });
       }
 
-      score = Math.min(100, score);
-
-      if (score > 0) {
-        // Base boost to ensure meaningful matches reflect a high percentage (>= 50%)
-        score = Math.min(100, 50 + score);
+      // AI profile similarity — catches semantic matches word overlap misses
+      const sim = simById.get(candidate.id) ?? 0;
+      let simFraction = 0;
+      if (sim > effectiveFloor) {
+        simFraction = Math.min(
+          1,
+          (sim - effectiveFloor) / (effectiveCeil - effectiveFloor),
+        );
+        rawScore += Math.round(simFraction * SUGGESTION_WEIGHTS.maxEmbedding);
+      }
+      // "Similar Profile" badge only when the similarity clearly stands out
+      // from the pool — weak similarity may rank but never labels
+      const strongSimilarity = simFraction >= 0.5;
+      if (strongSimilarity) {
+        matchingFields.push('profile_similarity');
+        matchingDetails.push({
+          field: 'profile_similarity',
+          value: `${Math.round(sim * 100)}%`,
+          label: 'Similar Profile',
+        });
       }
 
-      const reason = buildMatchReason(matchingDetails, candidate);
+      // Honest display score: percentage of a realistic "full match",
+      // capped at 99 — no flat boost
+      const matchScore =
+        rawScore > 0
+          ? Math.min(99, Math.round((rawScore / FULL_MATCH_POINTS) * 100))
+          : 0;
+
+      const reason = buildMatchReason(
+        matchingDetails,
+        mutualCount,
+        strongSimilarity,
+      );
 
       return {
         ...candidate,
-        matchScore: score,
+        matchScore,
         matchReason: reason,
         matchingFields,
         matchingDetails,
       };
     });
 
-    // Filter out users who have 0 matching fields unless it's global mode
+    // Only surface candidates with at least one visible signal (a badge the
+    // user can see). Weak embedding similarity alone may boost ranking but
+    // never surfaces anyone on its own — that's how "mystery suggestions"
+    // with no apparent connection used to leak in.
     let validCandidates = scoredCandidates;
     if (!isGlobal) {
       validCandidates = scoredCandidates.filter(
-        (candidate) => candidate.matchScore > 0,
+        (candidate) => candidate.matchingFields.length > 0,
       );
     } else {
       validCandidates = scoredCandidates.map((candidate) => {
-        if (candidate.matchScore === 0) {
+        if (candidate.matchingFields.length === 0) {
           return {
             ...candidate,
             matchScore: 0,
@@ -444,12 +610,16 @@ export class UsersService {
       });
     }
 
-    validCandidates.sort((a, b) => {
-      if (a.matchScore === b.matchScore && a.matchScore === 0) {
-        return Math.random() - 0.5;
-      }
-      return b.matchScore - a.matchScore;
-    });
+    // Stable random tiebreak (a comparator with Math.random() inside is
+    // inconsistent and can misbehave)
+    const tiebreak = new Map(
+      validCandidates.map((c) => [c.id, Math.random()]),
+    );
+    validCandidates.sort(
+      (a, b) =>
+        b.matchScore - a.matchScore ||
+        tiebreak.get(a.id)! - tiebreak.get(b.id)!,
+    );
     return validCandidates.slice(0, limit);
   }
 
@@ -496,8 +666,31 @@ export class UsersService {
 
 function buildMatchReason(
   matchingDetails: Array<{ field: string; value: string; label: string }>,
-  candidate: any,
+  mutualFriendCount: number,
+  strongSimilarity: boolean,
 ): string {
+  const mutualSentence =
+    mutualFriendCount > 0
+      ? `You have ${mutualFriendCount} mutual friend${mutualFriendCount > 1 ? 's' : ''}.`
+      : '';
+
+  const fieldReason = buildFieldReason(matchingDetails);
+
+  if (fieldReason) {
+    return mutualSentence ? `${mutualSentence} ${fieldReason}` : fieldReason;
+  }
+  if (mutualSentence) {
+    return mutualSentence;
+  }
+  if (strongSimilarity) {
+    return 'Your profiles look very similar.';
+  }
+  return 'Suggested connection based on active profile details.';
+}
+
+function buildFieldReason(
+  matchingDetails: Array<{ field: string; value: string; label: string }>,
+): string | null {
   const uni = matchingDetails.find((d) => d.field === 'university');
   const loc = matchingDetails.find((d) => d.field === 'location');
   const prof = matchingDetails.find((d) => d.field === 'profession');
@@ -544,71 +737,143 @@ function buildMatchReason(
     return `Both of you study/work in the ${dept.value} department.`;
   }
 
-  return 'Suggested connection based on active profile details.';
+  return null;
 }
 
-function getFilteredWords(str: string): string[] {
-  const STOP_WORDS = new Set([
-    'and',
-    'the',
-    'for',
-    'ltd',
-    'inc',
-    'co',
-    'corp',
-    'at',
-    'of',
-    'in',
-    'on',
-    'with',
-    'a',
-    'an',
-    'university',
-    'department',
-    'workplace',
-    'company',
-    'corporation',
-    'institute',
-    'school',
-    'college',
-    'tech',
-    'technology',
-    'science',
-    'engineering',
-    'solutions',
-    'software',
-    'systems',
-    'group',
-    'bangladesh',
-  ]);
+/** Split a comma-separated profile field into trimmed tokens. */
+function splitTokens(value: string | null | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+/** Normalize a token for comparison: lowercase, alphanumerics only ("Node.js" → "nodejs"). */
+function normalizeToken(token: string): string {
+  return token.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Full list — for proper nouns (university/company/place names) where generic
+// words like "software" or "tech" are filler, not meaning
+const STOP_WORDS = new Set([
+  'and',
+  'the',
+  'for',
+  'ltd',
+  'inc',
+  'co',
+  'corp',
+  'at',
+  'of',
+  'in',
+  'on',
+  'with',
+  'a',
+  'an',
+  'university',
+  'department',
+  'workplace',
+  'company',
+  'corporation',
+  'institute',
+  'school',
+  'college',
+  'tech',
+  'technology',
+  'science',
+  'engineering',
+  'solutions',
+  'software',
+  'systems',
+  'group',
+  'bangladesh',
+  'north',
+  'south',
+  'east',
+  'west',
+  'national',
+  'international',
+  'city',
+  'state',
+  'public',
+  'private',
+]);
+
+// Minimal list — for short semantic fields (profession, department) where
+// domain words like "software", "engineering" or "tech" ARE the meaning
+const MINIMAL_STOP_WORDS = new Set([
+  'and',
+  'the',
+  'for',
+  'at',
+  'of',
+  'in',
+  'on',
+  'with',
+  'a',
+  'an',
+]);
+
+function getFilteredWords(
+  str: string,
+  stopWords: Set<string> = STOP_WORDS,
+): string[] {
   return str
     .toLowerCase()
     .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, ' ')
     .split(/\s+/)
     .map((w) => w.trim())
-    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+    .filter((w) => w.length > 2 && !stopWords.has(w));
+}
+
+/**
+ * Prefix-aware token comparison so close word forms count as the same word:
+ * "web" ↔ "website", "develop" ↔ "developer" ↔ "development".
+ */
+function tokensMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  return shorter.length >= 3 && longer.startsWith(shorter);
 }
 
 function checkFieldOverlap(
   val1?: string | null,
   val2?: string | null,
-): { matches: boolean; matchedValue?: string } {
-  if (!val1 || !val2) return { matches: false };
+  useMinimalStopWords = false,
+): { matches: boolean; exact: boolean; matchedValue?: string } {
+  if (!val1 || !val2) return { matches: false, exact: false };
 
   const v1 = val1.trim().toLowerCase();
   const v2 = val2.trim().toLowerCase();
 
   if (v1 === v2 || v1.includes(v2) || v2.includes(v1)) {
-    return { matches: true, matchedValue: val2 };
+    return { matches: true, exact: true, matchedValue: val2 };
   }
 
-  const words1 = getFilteredWords(val1);
-  const words2 = getFilteredWords(val2);
-  const commonWords = words1.filter((w) => words2.includes(w));
-
-  if (commonWords.length > 0) {
-    return { matches: true, matchedValue: val2 };
+  const stopWords = useMinimalStopWords ? MINIMAL_STOP_WORDS : STOP_WORDS;
+  const words1 = getFilteredWords(val1, stopWords);
+  const words2 = getFilteredWords(val2, stopWords);
+  if (words1.length === 0 || words2.length === 0) {
+    return { matches: false, exact: false };
   }
 
-  return { matches: false };
+  const commonCount = words1.filter((w1) =>
+    words2.some((w2) => tokensMatch(w1, w2)),
+  ).length;
+  const minLen = Math.min(words1.length, words2.length);
+
+  // One shared word between long proper nouns is noise ("North South
+  // University" vs "South East University"), but between short phrases it's
+  // meaningful ("full stack developer" vs "website developer" share
+  // "developer"). Accept ≥2 shared words, full coverage of one side
+  // ("Dhaka University" vs "University of Dhaka"), or a single shared word
+  // when either phrase has at most 2 significant words.
+  const fullCoverage = commonCount === minLen;
+
+  if (commonCount >= 2 || (commonCount >= 1 && (fullCoverage || minLen <= 2))) {
+    return { matches: true, exact: false, matchedValue: val2 };
+  }
+
+  return { matches: false, exact: false };
 }
