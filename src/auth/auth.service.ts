@@ -13,7 +13,6 @@ import { AiDiscoveryService } from '../ai-discovery/ai-discovery.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
-// import type { StringValue } from 'ms'; // add this import
 
 @Injectable()
 export class AuthService {
